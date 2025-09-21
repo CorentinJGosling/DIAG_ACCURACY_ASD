@@ -1,0 +1,937 @@
+---
+title: "Supplementary materials for 'An evaluation of the individual and combined diagnostic accuracy of the ADI-R and ADOS-2 in a naturalistic clinical setting'"
+author: "Cartigny C, Gosling CJ, Chatzis G, [...], Cortese S, and Delorme R"
+date: "2025-10-01"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+---
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+library(tidyverse)
+library(readr)
+library(lubridate)
+library(kableExtra)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(Epi)
+library(meta)
+library(testCompareR)
+
+datr = read.csv("FACEASP_extraction.csv")
+datr[datr == ""] <- NA
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+datid = datr %>%
+  group_by(usubjid) %>%
+  filter(visit == "V0") %>%
+  ungroup()
+
+table(datr$visit, datr$cridsm26)
+
+dat_all_ages <- datid %>%
+  mutate(
+    birth_date = as.Date(brthdtc, format = "%Y-%m-%d"),
+    visit_date = as.Date(svdtc, format = "%Y-%m-%d"),
+    age_years = as.numeric(difftime(visit_date, birth_date, units = "days")) / 365.25,
+    age_years = round(age_years, 2),
+    AGE = ifelse(modsaisi == 3, "Children/Early adolescents",
+                 ifelse(modsaisi == 4, "Late adolescence/Adults", "Not of interest"))
+  )
+
+summary(dat_all_ages$age_years)
+# hist(dat_all_ages$age_years, breaks = 30, main = "Age Distribution", xlab = "Age (years)")
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat_clean_age = dat_all_ages %>%
+  filter(age_years >= 6 & age_years <= 50 & !is.na(brthdtc) & !is.na(svdtc)) 
+
+dat_clean_year = dat_clean_age %>%
+  filter(year(visit_date) >= 2015)
+
+dat_sex <- dat_clean_year %>%
+  mutate(
+    SEX = factor(sex, 
+                       levels = c(1, 2),
+                       labels = c("Male", "Female")),
+    sex_female = ifelse(sex == 2, 1, 0) 
+  )
+
+table(dat_sex$SEX)
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat_iq <- dat_sex %>%
+  mutate(
+    IQ_primary = case_when(
+      !is.na(wis5qt) ~ wis5qt,    
+      !is.na(wis4qt) ~ wis4qt,      
+      !is.na(wai4qit) ~ wai4qit,  
+      TRUE ~ NA_real_
+    ),
+    IQ_test_primary = case_when(
+      !is.na(wis5qt) ~ "WISC-5",
+      !is.na(wis4qt) ~ "WISC-4",
+      !is.na(wai4qit) ~ "WAIS-4",
+      TRUE ~ NA_character_
+    ),
+    
+    ICV=case_when(
+      !is.na(wis5cv) ~ as.numeric(as.character(wis5cv)),
+      !is.na(wis4cv) ~ as.numeric(as.character(wis4cv)),
+      !is.na(wai4icv) ~ as.numeric(as.character(wai4icv)),
+      TRUE ~NA_real_),
+    
+    ICV=case_when(
+      !is.na(wis5cv) ~ as.numeric(as.character(wis5cv)),
+      !is.na(wis4cv) ~ as.numeric(as.character(wis4cv)),
+      !is.na(wai4icv) ~ as.numeric(as.character(wai4icv)),
+      TRUE ~NA_real_),
+
+    IRP=case_when(
+      !is.na(wis4irp) ~ as.numeric(as.character(wis4irp)),
+      !is.na(wai4irp) ~ as.numeric(as.character(wai4irp)),
+      TRUE ~NA_real_),
+    
+    IRF=as.numeric(as.character(wis5irf))
+  ) %>%
+  rowwise() %>%
+  mutate(
+    proxy_IQ =metaConvert:::.mean_na(c(ICV, IRP, IRF), na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    IQ = coalesce(IQ_primary, if_else(is.nan(proxy_IQ), NA_real_, proxy_IQ)),
+    IQ_test = coalesce(IQ_test_primary, if_else(!is.na(IQ_primary), "Proxy", NA_character_)),
+    IQ_category = case_when(
+      IQ >= 130 ~ "Very Superior",
+      IQ >= 120 ~ "Superior",
+      IQ >= 110 ~ "High Average",
+      IQ >= 90 ~ "Average",
+      IQ >= 80 ~ "Low Average",
+      IQ >= 70 ~ "Borderline",
+      IQ < 70 ~ "Extremely Low",
+      TRUE ~ NA_character_
+    ),
+    intellectual_disability = ifelse(IQ < 70, 1, 0)
+  )
+
+View(dat_iq %>%
+       select(ICV, IRP, IRF, proxy_IQ))
+
+cor.test(dat_iq$proxy_IQ, dat_iq$IQ_primary)
+summary(dat_iq$IQ)
+table(dat_iq$IQ_test, useNA = "ifany")
+table(dat_iq$IQ_category, useNA = "ifany")
+
+# hist(dat_iq$IQ, breaks = 30, main = "IQ Distribution", xlab = "Full Scale IQ")
+# abline(v = c(70, 85, 100, 115, 130), col = "red", lty = 2)
+
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat_iq_clean = dat_iq %>%
+  filter(IQ >= 70 | is.na(IQ))
+# ========== !!!!!!!!!!!!!!!!!!!!!! =========== #
+# OK?
+# ========== !!!!!!!!!!!!!!!!!!!!!! =========== #
+paste0("IQ<80, n=", nrow(dat_iq) - nrow(dat_iq_clean))
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat_fin <- dat_iq_clean %>%
+  mutate(
+    ados_module = factor(modsaisi,
+      levels = c(2, 3, 4),
+      labels = c("Module 2 (removed)", 
+                 "Module 3 (Children)", 
+                 "Module 4 (Adolescents/Adults)"))
+  )
+
+table(dat_fin$ados_module)
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat_score <- dat_fin %>%
+  mutate(
+    ASD_DIAG = cridsm26,
+    ADOS_DIAG = case_when(
+      !is.na(a23class) & modsaisi == 3 ~ ifelse(a23class == 3, 0, 1),
+      !is.na(a24class) & modsaisi == 4 ~ ifelse(a24class == 3, 0, 1),
+      TRUE ~ NA_real_
+    ),
+    
+    ADI_DIAG_ALG = adi_diag,
+    ADI_DIAG = case_when(
+      adialg_tota >= 10 & 
+        adialg_totb >= 8 & 
+        adialg_totc >= 3 ~1,
+      TRUE~0)) %>%
+  mutate(
+    ADI_ADOS_OR = ifelse(ADI_DIAG == 1 | ADOS_DIAG == 1, 1, 0),
+    ADI_ADOS_AND = ifelse(ADI_DIAG == 1 & ADOS_DIAG == 1, 1, 0)
+  ) %>%
+  ungroup()
+
+dat_score1 = dat_score %>%
+  mutate(
+    ADI_CORRECT = ADI_DIAG == ASD_DIAG,
+    ADOS_CORRECT = ADOS_DIAG == ASD_DIAG,
+    ADI_ADOS_OR_CORRECT = ADI_ADOS_OR == ASD_DIAG,
+    ADI_ADOS_AND_CORRECT = ADOS_DIAG == ASD_DIAG,
+    ADOS_miss = case_when(
+      ADOS_DIAG == 0 & ASD_DIAG == 1 ~ 1,
+      ADOS_DIAG == 0 & ASD_DIAG == 0 ~ 0,
+      ADOS_DIAG == 1 ~ 0,
+      TRUE ~ NA_real_),
+    ADI_miss = case_when(
+      ADI_DIAG == 0 & ASD_DIAG == 1 ~ 1,
+      ADI_DIAG == 0 & ASD_DIAG == 0 ~ 0,
+      ADI_DIAG == 1 ~ 0,
+    TRUE ~ NA_real_))
+
+missing_summary <- dat_score1 %>%
+  ungroup() %>%
+  select(age_years, SEX, ados_module, 
+         ASD_DIAG, ADOS_DIAG, ADI_DIAG) %>%
+  summarise_all(~sum(is.na(.)))
+
+
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat_score1$tbath[dat_score1$tbath == 9] <- NA_real_
+dat_score1$tranxi[dat_score1$tranxi == 9] <- NA_real_
+dat_score1$tcond[dat_score1$tcond == 9] <- NA_real_
+dat_score1$tbopp[dat_score1$tbopp == 9] <- NA_real_
+dat_score1$edm[dat_score1$edm == 9] <- NA_real_
+dat_score1$ts[dat_score1$ts == 9] <- NA_real_
+dat_score1$DIAG_ADHD <- dat_score1$tbath
+dat_score1$DIAG_ANX <- dat_score1$tranxi
+dat_score1$DIAG_CD <- dat_score1$tcond
+dat_score1$DIAG_ODD <- dat_score1$tbopp
+dat_score1$DIAG_MDD <- dat_score1$edm
+dat_score1$DIAG_SUICID <- dat_score1$ts
+dat_score1$Vineland <- dat_score1$ncca
+dat_score1$ceoccur_tac[dat_score1$ceoccur_tac==9] <- NA_real_
+dat_score1$DIAG_DCD<- dat_score1$ceoccur_tac
+
+dat_score1$trbco01[dat_score1$trbco01==9] <- NA_real_
+dat_score1$DIAG_LGE<- dat_score1$trbco01
+
+dat_score1$tcond[dat_score1$tcond==9] <- NA_real_
+dat_score1$DIAG_TCOND<- dat_score1$tcond
+       
+dat_score1$tcali[dat_score1$tcali==9] <- NA_real_
+dat_score1$DIAG_ED<- dat_score1$tcali
+
+
+dat_score1 <- dat_score1 %>%
+  rowwise() %>%
+  mutate(
+    sumCOMOR = metaConvert:::.sum_na(c(DIAG_ADHD, DIAG_ANX, DIAG_CD, DIAG_ODD, DIAG_MDD, DIAG_SUICID, DIAG_DCD, DIAG_LGE, DIAG_TCOND, DIAG_ED), na.rm=TRUE)
+  ) %>%
+  mutate(PSYCH_COMOR = ifelse(sumCOMOR > 0, 1, 0))
+
+
+
+# View(dat_score1 %>%
+#        select(PSYCH_COMOR, DIAG_ADHD, DIAG_ANX, DIAG_CD, DIAG_ODD, DIAG_MDD, DIAG_SUICID, DIAG_DCD, DIAG_LGE, DIAG_TCOND, DIAG_ED))
+dat_raw = dat_score1 %>%
+  filter(modsaisi %in% c(3, 4))
+
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat_full = dat_raw  %>%
+  filter(!is.na(ADOS_DIAG) & !is.na(ADI_DIAG) & 
+           !is.na(adi_diag) & !is.na(ASD_DIAG)) %>%
+  mutate(
+    ASD_DIAG_factor = factor(ASD_DIAG, 
+                             levels = c(0, 1),
+                             labels = c("No ASD", "ASD")),
+    AGE = factor(AGE),
+    SEX_factor = factor(SEX)
+  )
+
+dat_m3_full <- dat_score1 %>%
+  filter(modsaisi == 3) %>%
+  mutate(age_group = "Children/Early Adolescents")
+
+dat_m3 <- dat_m3_full %>%
+  filter(!is.na(ADOS_DIAG) & !is.na(ADI_DIAG) & 
+           !is.na(adi_diag) & !is.na(ASD_DIAG))
+
+dat_m4_full <- dat_score1 %>%
+  filter(modsaisi == 4) %>%
+  mutate(age_group = "Late Adolescents/Adults")
+
+dat_m4 <- dat_m4_full %>%
+  filter(!is.na(ADOS_DIAG) & !is.na(ADI_DIAG) & 
+           !is.na(adi_diag) & !is.na(ASD_DIAG))
+```
+
+# S1: Sample / missing
+```{r}
+cat("Total sample:\n-N (total) =",  nrow(dat_raw),
+    "\n- N (analysis) =", nrow(dat_m3) + nrow(dat_m4), "(", round((nrow(dat_m3) + nrow(dat_m4)) / nrow(dat_raw)*100), "%)")
+
+cat("Module 3 (Children):\n-N (total) =",  nrow(dat_m3_full),
+    "\n- N (analysis) =", nrow(dat_m3), "(", round(nrow(dat_m3) / nrow(dat_m3_full)*100), "%)")
+
+cat("Module 4 (Adults):\n-N (total) =",  nrow(dat_m4_full),
+    "\n- N (analysis) =", nrow(dat_m4), "(", round(nrow(dat_m4) / nrow(dat_m4_full)*100), "%)")
+
+```
+
+```{r, echo=FALSE}
+
+ggplot(dat_full, aes(x = SEX, fill = ASD_DIAG_factor)) +
+  geom_bar(position = "dodge", alpha = 0.8) +
+  facet_wrap(~ AGE) +
+  labs(title = "ASD diagnosis distribution by age group and sex",
+       x = "Age group",
+       y = "Count",
+       fill = "Diagnosis") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = c("No ASD" = "#56B4E9", "ASD" = "#E69F00"))
+
+```
+
+---
+
+# S2: Demographics
+```{r, echo = FALSE, warning=FALSE, results='hide', message=FALSE}
+df.table = dat_full
+
+df.table$age <- df.table$age_years %>%
+  finalfit::ff_label("Age")
+
+df.table$sex <- factor(df.table$SEX) %>%
+  finalfit::ff_label("Sex")
+
+df.table$diag_ASD <- factor(df.table$ASD_DIAG_factor) %>%
+  finalfit::ff_label("Autism Spectrum Disorder")
+
+df.table$PSYCH_COMOR <- factor(df.table$PSYCH_COMOR,
+                            levels=c("1","0"), labels=c("Any psychiatric comorbidity", "No psychiatry comorbidity")) %>%
+  finalfit::ff_label("ADHD")
+
+df.table$diag_ADHD <- factor(df.table$tbath,
+                            levels=c("1","0"), labels=c("ADHD", "no-ADHD")) %>%
+  finalfit::ff_label("ADHD")
+
+df.table$diag_CD <- factor(df.table$tcond,
+      levels=c("1","0"), 
+      labels=c("CD", "no-CD")) %>%
+  finalfit::ff_label("Conduct Disorder")
+
+df.table$diag_ODD <- factor(df.table$tbopp,
+      levels=c("1","0"), 
+      labels=c("ODD", "no-ODD")) %>%
+  finalfit::ff_label("Oppositional defiant disorder")
+
+df.table$diag_MDD <- factor(df.table$edm,
+      levels=c("1","0"), 
+      labels=c("Yes", "No")) %>%
+  finalfit::ff_label("Major Depressive Disorder")
+
+df.table$diag_ANX <- factor(df.table$tranxi,
+      levels=c("1","0"), 
+      labels=c("Yes", "No")) %>%
+  finalfit::ff_label("Anxiety Disorder")
+
+df.table$TS <- factor(df.table$ts,
+                            levels=c("1","0"), 
+                      labels=c("Yes", "No")) %>%
+  finalfit::ff_label("Suicidal behaviours")
+
+df.table$diag_DCD <- factor(df.table$ceoccur_tac,
+      levels=c("1","0"), 
+      labels=c("Yes", "No")) %>%
+  finalfit::ff_label("Developmental Coordination Disorder")
+
+
+df.table$diag_LD <- factor(df.table$trbco01,
+      levels=c("1","0"), 
+      labels=c("Yes", "No")) %>%
+  finalfit::ff_label("Developmental Language Disorder")
+
+
+df.table$diag_TCOND <- factor(df.table$tcond,
+      levels=c("1","0"), 
+      labels=c("Yes", "No")) %>%
+  finalfit::ff_label("Conduct Disorder")
+
+
+df.table$diag_ED <- factor(df.table$tcali,
+      levels=c("1","0"), 
+      labels=c("Yes", "No")) %>%
+  finalfit::ff_label("Eating Disorder")  
+
+
+df.table$ADOS_module <- factor(df.table$ados_module)
+
+df.table$IQ <- df.table$IQ %>%
+  finalfit::ff_label("FSIQ")
+df.table$TOTCOMSC <- df.table$totcomsc %>%
+  finalfit::ff_label("Vineland (communication)")
+df.table$TOTSOCSC <- df.table$totsocsc %>%
+  finalfit::ff_label("Vineland (socialization)")
+df.table$TOTVIESC <- df.table$totviesc %>%
+  finalfit::ff_label("Vineland (daily life)")
+df.table$NCCA <- df.table$ncca %>%
+  finalfit::ff_label("Vineland (total)")
+```
+
+
+```{r, warning=FALSE}
+table1::table1(~ age + sex + 
+   diag_ADHD + diag_CD + diag_ODD + diag_MDD + diag_ANX + 
+     diag_DCD + diag_LD + diag_ED + diag_TCOND +
+     TS + IQ + NCCA + TOTCOMSC + TOTSOCSC + TOTVIESC | diag_ASD + ADOS_module,  
+   data = df.table, overall = "FALSE")
+```
+
+```{css, echo=FALSE, eval=knitr::is_html_output()}
+/* This CSS chunk only runs when knitting to HTML */
+hr {
+  margin-top: 35px;
+  margin-bottom: 35px;
+  border: 2px solid #2d2d2d;
+}
+```
+
+
+---
+
+
+# S3: Main analysis 1: Children
+
+Function to facilitate calculations
+```{r}
+test_metrics = function(x, test, age) {
+  res = testCompareR::summariseR(x, dp=3)
+  rawres = data.frame(rbind(
+    res["acc"][[1]], res["lr"][[1]]
+  ))
+  rawres[, "Test"] <- test
+  rawres[, "Age"] <- age
+  rownames(rawres)[rownames(rawres) == "Sensitivity"] <- "Sensitivity"
+  rownames(rawres)[rownames(rawres) == "Specificity"] <- "Specificity"
+  rownames(rawres)[rownames(rawres) == "NLR"] <- "LR-"
+  rownames(rawres)[rownames(rawres) == "PLR"] <- "LR+"
+  return(rawres)
+}
+```
+
+## Individual{.tabset}
+
+### Children: ADI-R (Module 3)
+```{r}
+#
+resa1 = test_metrics(dat_m3 %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Children/Early adolescents")
+print(resa1)
+# Epi::ROC(form = ASD_DIAG ~ ADI_DIAG, plot="ROC", data=dat_m3)
+```
+
+### Children: ADOS-2 (Module 3)
+```{r}
+resa2 = test_metrics(dat_m3 %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Children/Early adolescents")
+print(resa2)
+# Epi::ROC(form = ASD_DIAG ~ ADOS_DIAG, plot="ROC", data=dat_m3)
+```
+
+## Combination{.tabset}
+
+### Children: ADOS-2 + ADI-R (OR) - Module 3
+```{r}
+#{.tabset}
+
+# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_OR, plot="ROC", data=dat_m3)
+resa4 = test_metrics(dat_m3 %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2+ADI-R (OR)",
+                     "Children/Early adolescents")
+print(resa4)
+```
+
+### Children: ADOS-2 + ADI-R (AND) - Module 3
+```{r}
+# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_AND, plot="ROC", data=dat_m3)
+resa5 = test_metrics(dat_m3 %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2+ADI-R (AND)",
+                     "Children/Early adolescents")
+print(resa5)
+```
+
+## Comparison
+```{r}
+testCompareR::compareR(
+  df = dat_m3,
+  test1 = "ADI_DIAG",
+  test2 = "ADOS_DIAG",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "ADOS-2"))
+```
+
+```{r}
+testCompareR::compareR(
+  df = dat_m3,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m3,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (AND)"))
+
+```
+
+```{r}
+testCompareR::compareR(
+  df = dat_m3,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m3,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (AND)"))
+
+```
+
+---
+
+# S4: Main analysis 2: Adults
+
+## Individual{.tabset}
+
+### Adults: ADI-R (Module 3)
+```{r}
+# {.tabset}
+resb1 = test_metrics(dat_m4 %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Late adolescents/Adults")
+print(resb1)
+# Epi::ROC(form = ASD_DIAG ~ ADI_DIAG, plot="ROC", data=dat_m4)
+```
+
+### Adults: ADOS-2 (Module 3)
+```{r}
+resb2 = test_metrics(dat_m4 %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Late adolescents/Adults")
+print(resb2)
+# Epi::ROC(form = ASD_DIAG ~ ADOS_DIAG, plot="ROC", data=dat_m4)
+```
+
+## Combination{.tabset}
+
+### Adults: ADOS-2 + ADI-R (OR) - Module 3
+```{r}
+# {.tabset}
+# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_OR, plot="ROC", data=dat_m4)
+resb4 = test_metrics(dat_m4 %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2+ADI-R (OR)",
+                     "Late adolescents/Adults")
+print(resb4)
+```
+
+### Adults: ADOS-2 + ADI-R (AND) - Module 3
+```{r}
+# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_AND, plot="ROC", data=dat_m4)
+resb5 = test_metrics(dat_m4 %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2+ADI-R (AND)",
+                     "Late adolescents/Adults")
+print(resb5)
+```
+
+## Comparison
+```{r}
+testCompareR::compareR(
+  df = dat_m4,
+  test1 = "ADI_DIAG",
+  test2 = "ADOS_DIAG",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "ADOS-2"))
+```
+
+```{r}
+testCompareR::compareR(
+  df = dat_m4,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m4,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (AND)"))
+
+```
+
+```{r}
+testCompareR::compareR(
+  df = dat_m4,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m4,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (AND)"))
+
+```
+
+
+---
+
+
+# S5. Main analysis: visualization
+```{r,echo=FALSE, fig.width=12, fig.height=7}
+resa = dplyr::bind_rows(
+  resa1, resa2, resa4, resa5, 
+  resb1, resb2, resb4, resb5  
+) %>%
+  rownames_to_column("Psych") %>%
+  mutate(Psych = gsub("[0-9]","", gsub("\\.", "", Psych)),
+         subG = paste0(Psych, " (", Age, ")"))
+
+# Create forest plots
+res_LR = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, grepl("LR", subG, fixed=TRUE)),
+  subgroup=Age,
+  studlab = Test
+)
+
+res_sesp = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, !grepl("LR", subG, fixed=TRUE)),
+  subgroup=Test,
+  studlab = Age
+)
+meta::forest(
+  smlab = "",
+  res_sesp,
+  digits = 2,
+  # layout = "RevMan",
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+
+# Plot Likelihood Ratios
+meta::forest(
+  res_LR,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+
+# Plot Sensitivity and Specificity
+```
+
+
+---
+
+# S6. Exploratory analysis
+
+```{r}
+library(ggplot2)
+library(broom)
+library(dplyr)
+dat_m3$age_years_std = as.numeric(scale(dat_m3$age_years))
+dat_m3$IQ_std = as.numeric(scale(dat_m3$IQ))
+dat_m3$Vineland_std = as.numeric(scale(dat_m3$Vineland))
+
+dat_m4$age_years_std = as.numeric(scale(dat_m4$age_years))
+dat_m4$IQ_std = as.numeric(scale(dat_m4$IQ))
+dat_m4$Vineland_std = as.numeric(scale(dat_m4$Vineland))
+
+
+```
+
+
+```{r}
+library(purrr)
+library(dplyr)
+library(broom)
+
+model_formula <- as.formula("OUTCOME ~ age_years_std + IQ_std + SEX + PSYCH_COMOR")
+
+model_configs <- tribble(
+  ~data, ~outcome, ~age_group, ~test,
+  "dat_m3", "ADI_CORRECT", "Children", "ADI-R",
+  "dat_m3", "ADOS_CORRECT", "Children", "ADOS-2", 
+  # "dat_m3", "ADI_ADOS_OR_CORRECT", "Children", "ADI | ADOS",
+  # "dat_m3", "ADI_ADOS_AND_CORRECT", "Children", "ADI & ADOS", 
+  "dat_m4", "ADI_CORRECT", "Adults", "ADI-R",
+  "dat_m4", "ADOS_CORRECT", "Adults", "ADOS-2",
+  # "dat_m4", "ADI_ADOS_OR_CORRECT", "Adults", "ADI | ADOS",
+  # "dat_m4", "ADI_ADOS_AND_CORRECT", "Adults", "ADI & ADOS"
+)
+
+fit_and_extract_robust <- function(data_name, outcome, age_group, test) {
+  data_original <- get(data_name)
+  
+  model_vars <- c(outcome, "age_years_std", "IQ_std", "SEX", "PSYCH_COMOR")
+  
+  model_data <- data_original %>%
+    select(all_of(model_vars)) %>%
+    na.omit()
+
+    formula_str <- paste(outcome, "~", "age_years_std + IQ_std + SEX + PSYCH_COMOR")
+  
+  model_fml <- as.formula(formula_str)
+  
+  model <- glm(model_fml, data = model_data, family = binomial)
+
+  results <- tidy(model, conf.int = TRUE) %>%
+    filter(term != "(Intercept)") %>%
+    mutate(
+      Age = age_group,
+      Test = test,
+      sample_size = nobs(model),
+      term = recode(term,
+                    "age_years_std" = "Age",
+                    "SEXFemale" = "Female vs Male",
+                    "PSYCH_COMOR" = "Any comorbidity",
+                    "IQ_std" = "Full-Scale IQ",
+                    "DIAG_ADHD" = "ADHD",
+                    "Vineland_std" = "Vineland",
+                    "DIAG_ANX" = "Anxiety",
+                    "DIAG_MDD" = "Depression",
+                    "DIAG_SUICID" = "Suicidality"
+      )
+    )
+  
+  return(results)
+}
+
+dat_reg <- model_configs %>%
+  pmap_dfr(fit_and_extract_robust)
+
+dat_reg <- dat_reg %>%
+  mutate(
+    group_label = paste0(Age, " - ", Test, "\n(n=", sample_size, ")")
+  )
+
+dat_reg_clipped <- dat_reg %>%
+  mutate(
+    conf.low_clipped = pmax(conf.low, -3.5),
+    conf.high_clipped = pmin(conf.high, 3.5)
+  )
+```
+
+
+```{r}
+library(ggplot2)
+# library(showtext)
+# library(sysfonts)
+
+# font_add_google("Roboto", "roboto")
+# showtext_auto()
+
+ggplot(dat_reg_clipped, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  geom_point(size = 4,
+           shape=22, fill="#949494", color="#262626") +
+  geom_errorbarh(aes(xmin = conf.low_clipped, xmax = conf.high_clipped), size= 0.7, height = 0.01) +
+  facet_wrap(~ group_label, nrow = 2) +
+  xlim(-1.5, 1.5) +
+  labs(x = "Standardized regression coefficients", y = "") +
+  theme_bw() +
+  theme(strip.text = element_text(size = 9))
+
+```
+
+
+
+
+```{r}
+dat_reg %>%
+  filter(p.value < 0.10) %>%
+  arrange(term, Age, Test) %>%
+  select(term, Age, Test, estimate, p.value, conf.low, conf.high) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
+    scroll_box(width = "100%", height = "500px")
+```
+
+```{r}
+library(dplyr)
+library(purrr)
+library(rlang) # Often good practice when using .data
+
+summarize_predictors <- function(data_name, outcome, age_group, test) {
+  
+  # Get the actual data from its name
+  data <- get(data_name)
+  predictor_names = c("age_years_std", "IQ_std", "SEX", "PSYCH_COMOR")
+
+  # Define the predictors from your model
+  
+  # Use map_dfr to iterate over each predictor and build one summary table
+  summary_table <- purrr::map_dfr(predictor_names, function(pred_name) {
+    
+    predictor_column <- data[[pred_name]]
+    
+    if (is.numeric(predictor_column) && n_distinct(predictor_column, na.rm = TRUE) > 2) {
+      # --- Continuous variable logic ---
+      
+      median_val <- median(data[[pred_name]], na.rm = TRUE)
+      
+      summary_df <- data %>%
+        mutate(
+          Group = if_else(
+            .data[[pred_name]] >= median_val,
+            "Above/Equal to Median",
+            "Below Median"
+          )
+        ) %>%
+        group_by(Group) %>%
+        summarise(
+          N = n(),
+          DIAG_CORRECT = mean(.data[[outcome]], na.rm = TRUE) * 100,
+          .groups = 'drop'
+        ) %>%
+        mutate(Predictor = pred_name, .before = 1) %>%
+        filter(!is.na(Group))
+      
+    } else {
+      # --- Binary/Categorical variable logic ---
+      
+      summary_df <- data %>%
+        group_by(Group = as.character(.data[[pred_name]])) %>%
+        summarise(
+          N = n(),
+          DIAG_CORRECT = mean(.data[[outcome]], na.rm = TRUE) * 100,
+          .groups = 'drop'
+        ) %>%
+        mutate(Predictor = pred_name, .before = 1)%>%
+        filter(!is.na(Group))
+    }
+    
+    return(summary_df)
+  })
+  
+  summary_table %>%
+    mutate(
+      Age = age_group,
+      Test = test,
+      Outcome = outcome,
+      .before = 1
+    )
+}
+
+
+library(kableExtra)
+
+tribble(
+  ~data, ~outcome, ~age_group, ~test,
+  "dat_m3", "ADI_CORRECT", "Children", "ADI-R") %>%
+  pmap_dfr(summarize_predictors) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
+    scroll_box(width = "100%", height = "500px")
+
+tribble(
+  ~data, ~outcome, ~age_group, ~test,
+  "dat_m3", "ADOS_CORRECT", "Children", "ADOS-2") %>%
+  pmap_dfr(summarize_predictors) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
+    scroll_box(width = "100%", height = "500px")
+
+tribble(
+  ~data, ~outcome, ~age_group, ~test,
+  "dat_m4", "ADI_CORRECT", "Adults", "ADI-R") %>%
+  pmap_dfr(summarize_predictors) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
+    scroll_box(width = "100%", height = "500px")
+
+tribble(
+  ~data, ~outcome, ~age_group, ~test,
+  "dat_m4", "ADOS_CORRECT", "Adults", "ADOS-2") %>%
+  pmap_dfr(summarize_predictors) %>%
+  kbl() %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
+    scroll_box(width = "100%", height = "500px")
+
+```
+
