@@ -1,6 +1,6 @@
 ---
 title: "Supplementary materials for 'An evaluation of the individual and combined diagnostic accuracy of the ADI-R and ADOS-2 in a naturalistic clinical setting'"
-author: "Cartigny C, Gosling CJ, Chatzis G, [...], Cortese S, and Delorme R"
+author: "Cartigny A, Gosling CJ, Chatzis G, [...], Cortese S, and Delorme R"
 date: "2025-10-01"
 output: 
   html_document:
