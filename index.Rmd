@@ -1,425 +1,1114 @@
 ---
-title: "Supplementary materials for 'An evaluation of the individual and combined diagnostic accuracy of the ADI-R and ADOS-2 in a naturalistic clinical setting'"
-author: "Cartigny A, Gosling CJ, Chatzis G, [...], Cortese S, and Delorme R"
-date: "2025-10-01"
-output: 
+title: "Diagnostic accuracy of ADI-R/ADOS-2 in a naturalistic high-risk ASD sample
+  aged 6-25"
+subtitle: "Supplementary Materials - Revised version" 
+author: "Ariane Cartigny,  Corentin J. Gosling, Georges Chatzis, Ophélia Godin, Ariel Frajerman, Elise Humeau, Paola Atzori, Sara Ramos Pereira, Pierre Ellul, Stéphanie Antoun, Chema Sahnoun Derbel, Elodie Zante, Julien Pottelette, Natalia Robert, Virginie Pomies, Gabrielle Chesnoy, Delphine Weill, Romain Coutelle, Mario Speranza, Anouck Amestoy, the FACE-ASD (FondaMental Advanced Centers of Expertise for Autism Spectrum Disorder) Groups, Sylvain Moutier, Marion Leboyer, Samuele Cortese, Richard Delorme"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
   html_document:
+    theme: flatly
+    highlight: tango
     toc: true
-    toc_float: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    number_sections: false
+    code_folding: hide
+    df_print: paged
+    self_contained: true
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: '3'
+fontsize: 12pt
+mainfont: "Times New Roman"
+geometry: margin=1.5cm
+header-includes: |
+  \usepackage{pdfpages}
+  \usepackage{titlesec}
+  \newcommand{\sectionbreak}{\clearpage}
+  \titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+  \titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+  \titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{1em}{}
+  \titleformat{\paragraph}[block]{\normalsize\bfseries\itshape}{\theparagraph}{1em}{}
+  \usepackage{titling}
+  \pretitle{\begin{center}\LARGE\bfseries}
+  \posttitle{\par\end{center}\vskip 1em}
+  \setlength{\intextsep}{4pt}     
+  \setlength{\textfloatsep}{4pt}   
+  \setlength{\floatsep}{4pt}       
+  \setlength{\abovecaptionskip}{2pt}
+  \setlength{\belowcaptionskip}{2pt}
 ---
 
----
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = FALSE, 
+  message = FALSE,  
+  warning = FALSE,
+  dev      = c("png", "cairo_pdf"),  
+  fig.path = "output/Figures/",
+  dpi      = 300,
+  fig.align  = "center",
+  out.width = "100%",  
+  fig.width = 8,
+  fig.height = 5 
+)
+```
 
 ```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-library(tidyverse)
-library(readr)
-library(lubridate)
-library(kableExtra)
-library(ggplot2)
-library(dplyr)
-library(tidyr)
-library(tidyverse)
+library(broom)
+library(consort)
+#library(dplyr)
 library(Epi)
+library(effsize)
+library(finalfit)
+library(flextable)
+#library(ggplot2)
+library(ggpubr)
+library(glue)
+library(grid)
+library(kableExtra)
+#library(lubridate)
+library(magrittr)
 library(meta)
+#library(purrr)
+#library(readr)
+library(stringdist)
+#library(stringr)
+library(table1)
 library(testCompareR)
-
-datr = read.csv("FACEASP_extraction.csv")
-datr[datr == ""] <- NA
-```
-
-```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-datid = datr %>%
-  group_by(usubjid) %>%
-  filter(visit == "V0") %>%
-  ungroup()
-
-table(datr$visit, datr$cridsm26)
-
-dat_all_ages <- datid %>%
-  mutate(
-    birth_date = as.Date(brthdtc, format = "%Y-%m-%d"),
-    visit_date = as.Date(svdtc, format = "%Y-%m-%d"),
-    age_years = as.numeric(difftime(visit_date, birth_date, units = "days")) / 365.25,
-    age_years = round(age_years, 2),
-    AGE = ifelse(modsaisi == 3, "Children/Early adolescents",
-                 ifelse(modsaisi == 4, "Late adolescence/Adults", "Not of interest"))
-  )
-
-summary(dat_all_ages$age_years)
-# hist(dat_all_ages$age_years, breaks = 30, main = "Age Distribution", xlab = "Age (years)")
-```
-
-```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-dat_clean_age = dat_all_ages %>%
-  filter(age_years >= 6 & age_years <= 50 & !is.na(brthdtc) & !is.na(svdtc)) 
-
-dat_clean_year = dat_clean_age %>%
-  filter(year(visit_date) >= 2015)
-
-dat_sex <- dat_clean_year %>%
-  mutate(
-    SEX = factor(sex, 
-                       levels = c(1, 2),
-                       labels = c("Male", "Female")),
-    sex_female = ifelse(sex == 2, 1, 0) 
-  )
-
-table(dat_sex$SEX)
-```
-
-```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-dat_iq <- dat_sex %>%
-  mutate(
-    IQ_primary = case_when(
-      !is.na(wis5qt) ~ wis5qt,    
-      !is.na(wis4qt) ~ wis4qt,      
-      !is.na(wai4qit) ~ wai4qit,  
-      TRUE ~ NA_real_
-    ),
-    IQ_test_primary = case_when(
-      !is.na(wis5qt) ~ "WISC-5",
-      !is.na(wis4qt) ~ "WISC-4",
-      !is.na(wai4qit) ~ "WAIS-4",
-      TRUE ~ NA_character_
-    ),
-    
-    ICV=case_when(
-      !is.na(wis5cv) ~ as.numeric(as.character(wis5cv)),
-      !is.na(wis4cv) ~ as.numeric(as.character(wis4cv)),
-      !is.na(wai4icv) ~ as.numeric(as.character(wai4icv)),
-      TRUE ~NA_real_),
-    
-    ICV=case_when(
-      !is.na(wis5cv) ~ as.numeric(as.character(wis5cv)),
-      !is.na(wis4cv) ~ as.numeric(as.character(wis4cv)),
-      !is.na(wai4icv) ~ as.numeric(as.character(wai4icv)),
-      TRUE ~NA_real_),
-
-    IRP=case_when(
-      !is.na(wis4irp) ~ as.numeric(as.character(wis4irp)),
-      !is.na(wai4irp) ~ as.numeric(as.character(wai4irp)),
-      TRUE ~NA_real_),
-    
-    IRF=as.numeric(as.character(wis5irf))
-  ) %>%
-  rowwise() %>%
-  mutate(
-    proxy_IQ =metaConvert:::.mean_na(c(ICV, IRP, IRF), na.rm = TRUE)
-  ) %>%
-  ungroup() %>%
-  mutate(
-    IQ = coalesce(IQ_primary, if_else(is.nan(proxy_IQ), NA_real_, proxy_IQ)),
-    IQ_test = coalesce(IQ_test_primary, if_else(!is.na(IQ_primary), "Proxy", NA_character_)),
-    IQ_category = case_when(
-      IQ >= 130 ~ "Very Superior",
-      IQ >= 120 ~ "Superior",
-      IQ >= 110 ~ "High Average",
-      IQ >= 90 ~ "Average",
-      IQ >= 80 ~ "Low Average",
-      IQ >= 70 ~ "Borderline",
-      IQ < 70 ~ "Extremely Low",
-      TRUE ~ NA_character_
-    ),
-    intellectual_disability = ifelse(IQ < 70, 1, 0)
-  )
-
-View(dat_iq %>%
-       select(ICV, IRP, IRF, proxy_IQ))
-
-cor.test(dat_iq$proxy_IQ, dat_iq$IQ_primary)
-summary(dat_iq$IQ)
-table(dat_iq$IQ_test, useNA = "ifany")
-table(dat_iq$IQ_category, useNA = "ifany")
-
-# hist(dat_iq$IQ, breaks = 30, main = "IQ Distribution", xlab = "Full Scale IQ")
-# abline(v = c(70, 85, 100, 115, 130), col = "red", lty = 2)
-
-```
-
-```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-dat_iq_clean = dat_iq %>%
-  filter(IQ >= 70 | is.na(IQ))
-# ========== !!!!!!!!!!!!!!!!!!!!!! =========== #
-# OK?
-# ========== !!!!!!!!!!!!!!!!!!!!!! =========== #
-paste0("IQ<80, n=", nrow(dat_iq) - nrow(dat_iq_clean))
+#library(tidyr)
+library(tidyverse)
+library(tinytex)
+library(UpSetR)
 ```
 
 
 
 ```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-dat_fin <- dat_iq_clean %>%
-  mutate(
-    ados_module = factor(modsaisi,
-      levels = c(2, 3, 4),
-      labels = c("Module 2 (removed)", 
-                 "Module 3 (Children)", 
-                 "Module 4 (Adolescents/Adults)"))
-  )
-
-table(dat_fin$ados_module)
-```
-
-```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-dat_score <- dat_fin %>%
-  mutate(
-    ASD_DIAG = cridsm26,
-    ADOS_DIAG = case_when(
-      !is.na(a23class) & modsaisi == 3 ~ ifelse(a23class == 3, 0, 1),
-      !is.na(a24class) & modsaisi == 4 ~ ifelse(a24class == 3, 0, 1),
-      TRUE ~ NA_real_
-    ),
-    
-    ADI_DIAG_ALG = adi_diag,
-    ADI_DIAG = case_when(
-      adialg_tota >= 10 & 
-        adialg_totb >= 8 & 
-        adialg_totc >= 3 ~1,
-      TRUE~0)) %>%
-  mutate(
-    ADI_ADOS_OR = ifelse(ADI_DIAG == 1 | ADOS_DIAG == 1, 1, 0),
-    ADI_ADOS_AND = ifelse(ADI_DIAG == 1 & ADOS_DIAG == 1, 1, 0)
-  ) %>%
-  ungroup()
-
-dat_score1 = dat_score %>%
-  mutate(
-    ADI_CORRECT = ADI_DIAG == ASD_DIAG,
-    ADOS_CORRECT = ADOS_DIAG == ASD_DIAG,
-    ADI_ADOS_OR_CORRECT = ADI_ADOS_OR == ASD_DIAG,
-    ADI_ADOS_AND_CORRECT = ADOS_DIAG == ASD_DIAG,
-    ADOS_miss = case_when(
-      ADOS_DIAG == 0 & ASD_DIAG == 1 ~ 1,
-      ADOS_DIAG == 0 & ASD_DIAG == 0 ~ 0,
-      ADOS_DIAG == 1 ~ 0,
-      TRUE ~ NA_real_),
-    ADI_miss = case_when(
-      ADI_DIAG == 0 & ASD_DIAG == 1 ~ 1,
-      ADI_DIAG == 0 & ASD_DIAG == 0 ~ 0,
-      ADI_DIAG == 1 ~ 0,
-    TRUE ~ NA_real_))
-
-missing_summary <- dat_score1 %>%
-  ungroup() %>%
-  select(age_years, SEX, ados_module, 
-         ASD_DIAG, ADOS_DIAG, ADI_DIAG) %>%
-  summarise_all(~sum(is.na(.)))
-
-
-```
-
-```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-dat_score1$tbath[dat_score1$tbath == 9] <- NA_real_
-dat_score1$tranxi[dat_score1$tranxi == 9] <- NA_real_
-dat_score1$tcond[dat_score1$tcond == 9] <- NA_real_
-dat_score1$tbopp[dat_score1$tbopp == 9] <- NA_real_
-dat_score1$edm[dat_score1$edm == 9] <- NA_real_
-dat_score1$ts[dat_score1$ts == 9] <- NA_real_
-dat_score1$DIAG_ADHD <- dat_score1$tbath
-dat_score1$DIAG_ANX <- dat_score1$tranxi
-dat_score1$DIAG_CD <- dat_score1$tcond
-dat_score1$DIAG_ODD <- dat_score1$tbopp
-dat_score1$DIAG_MDD <- dat_score1$edm
-dat_score1$DIAG_SUICID <- dat_score1$ts
-dat_score1$Vineland <- dat_score1$ncca
-dat_score1$ceoccur_tac[dat_score1$ceoccur_tac==9] <- NA_real_
-dat_score1$DIAG_DCD<- dat_score1$ceoccur_tac
-
-dat_score1$trbco01[dat_score1$trbco01==9] <- NA_real_
-dat_score1$DIAG_LGE<- dat_score1$trbco01
-
-dat_score1$tcond[dat_score1$tcond==9] <- NA_real_
-dat_score1$DIAG_TCOND<- dat_score1$tcond
-       
-dat_score1$tcali[dat_score1$tcali==9] <- NA_real_
-dat_score1$DIAG_ED<- dat_score1$tcali
-
-
-dat_score1 <- dat_score1 %>%
-  rowwise() %>%
-  mutate(
-    sumCOMOR = metaConvert:::.sum_na(c(DIAG_ADHD, DIAG_ANX, DIAG_CD, DIAG_ODD, DIAG_MDD, DIAG_SUICID, DIAG_DCD, DIAG_LGE, DIAG_TCOND, DIAG_ED), na.rm=TRUE)
-  ) %>%
-  mutate(PSYCH_COMOR = ifelse(sumCOMOR > 0, 1, 0))
-
-
-
-# View(dat_score1 %>%
-#        select(PSYCH_COMOR, DIAG_ADHD, DIAG_ANX, DIAG_CD, DIAG_ODD, DIAG_MDD, DIAG_SUICID, DIAG_DCD, DIAG_LGE, DIAG_TCOND, DIAG_ED))
-dat_raw = dat_score1 %>%
-  filter(modsaisi %in% c(3, 4))
-
-```
-
-```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
-dat_full = dat_raw  %>%
-  filter(!is.na(ADOS_DIAG) & !is.na(ADI_DIAG) & 
-           !is.na(adi_diag) & !is.na(ASD_DIAG)) %>%
-  mutate(
-    ASD_DIAG_factor = factor(ASD_DIAG, 
-                             levels = c(0, 1),
-                             labels = c("No ASD", "ASD")),
-    AGE = factor(AGE),
-    SEX_factor = factor(SEX)
-  )
-
-dat_m3_full <- dat_score1 %>%
-  filter(modsaisi == 3) %>%
-  mutate(age_group = "Children/Early Adolescents")
-
-dat_m3 <- dat_m3_full %>%
-  filter(!is.na(ADOS_DIAG) & !is.na(ADI_DIAG) & 
-           !is.na(adi_diag) & !is.na(ASD_DIAG))
-
-dat_m4_full <- dat_score1 %>%
-  filter(modsaisi == 4) %>%
-  mutate(age_group = "Late Adolescents/Adults")
-
-dat_m4 <- dat_m4_full %>%
-  filter(!is.na(ADOS_DIAG) & !is.na(ADI_DIAG) & 
-           !is.na(adi_diag) & !is.na(ASD_DIAG))
-```
-
-# S1: Sample / missing
-```{r}
-cat("Total sample:\n-N (total) =",  nrow(dat_raw),
-    "\n- N (analysis) =", nrow(dat_m3) + nrow(dat_m4), "(", round((nrow(dat_m3) + nrow(dat_m4)) / nrow(dat_raw)*100), "%)")
-
-cat("Module 3 (Children):\n-N (total) =",  nrow(dat_m3_full),
-    "\n- N (analysis) =", nrow(dat_m3), "(", round(nrow(dat_m3) / nrow(dat_m3_full)*100), "%)")
-
-cat("Module 4 (Adults):\n-N (total) =",  nrow(dat_m4_full),
-    "\n- N (analysis) =", nrow(dat_m4), "(", round(nrow(dat_m4) / nrow(dat_m4_full)*100), "%)")
-
-```
-
-```{r, echo=FALSE}
-
-ggplot(dat_full, aes(x = SEX, fill = ASD_DIAG_factor)) +
-  geom_bar(position = "dodge", alpha = 0.8) +
-  facet_wrap(~ AGE) +
-  labs(title = "ASD diagnosis distribution by age group and sex",
-       x = "Age group",
-       y = "Count",
-       fill = "Diagnosis") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_fill_manual(values = c("No ASD" = "#56B4E9", "ASD" = "#E69F00"))
-
-```
-
----
-
-# S2: Demographics
-```{r, echo = FALSE, warning=FALSE, results='hide', message=FALSE}
-df.table = dat_full
-
-df.table$age <- df.table$age_years %>%
-  finalfit::ff_label("Age")
-
-df.table$sex <- factor(df.table$SEX) %>%
-  finalfit::ff_label("Sex")
-
-df.table$diag_ASD <- factor(df.table$ASD_DIAG_factor) %>%
-  finalfit::ff_label("Autism Spectrum Disorder")
-
-df.table$PSYCH_COMOR <- factor(df.table$PSYCH_COMOR,
-                            levels=c("1","0"), labels=c("Any psychiatric comorbidity", "No psychiatry comorbidity")) %>%
-  finalfit::ff_label("ADHD")
-
-df.table$diag_ADHD <- factor(df.table$tbath,
-                            levels=c("1","0"), labels=c("ADHD", "no-ADHD")) %>%
-  finalfit::ff_label("ADHD")
-
-df.table$diag_CD <- factor(df.table$tcond,
-      levels=c("1","0"), 
-      labels=c("CD", "no-CD")) %>%
-  finalfit::ff_label("Conduct Disorder")
-
-df.table$diag_ODD <- factor(df.table$tbopp,
-      levels=c("1","0"), 
-      labels=c("ODD", "no-ODD")) %>%
-  finalfit::ff_label("Oppositional defiant disorder")
-
-df.table$diag_MDD <- factor(df.table$edm,
-      levels=c("1","0"), 
-      labels=c("Yes", "No")) %>%
-  finalfit::ff_label("Major Depressive Disorder")
-
-df.table$diag_ANX <- factor(df.table$tranxi,
-      levels=c("1","0"), 
-      labels=c("Yes", "No")) %>%
-  finalfit::ff_label("Anxiety Disorder")
-
-df.table$TS <- factor(df.table$ts,
-                            levels=c("1","0"), 
-                      labels=c("Yes", "No")) %>%
-  finalfit::ff_label("Suicidal behaviours")
-
-df.table$diag_DCD <- factor(df.table$ceoccur_tac,
-      levels=c("1","0"), 
-      labels=c("Yes", "No")) %>%
-  finalfit::ff_label("Developmental Coordination Disorder")
-
-
-df.table$diag_LD <- factor(df.table$trbco01,
-      levels=c("1","0"), 
-      labels=c("Yes", "No")) %>%
-  finalfit::ff_label("Developmental Language Disorder")
-
-
-df.table$diag_TCOND <- factor(df.table$tcond,
-      levels=c("1","0"), 
-      labels=c("Yes", "No")) %>%
-  finalfit::ff_label("Conduct Disorder")
-
-
-df.table$diag_ED <- factor(df.table$tcali,
-      levels=c("1","0"), 
-      labels=c("Yes", "No")) %>%
-  finalfit::ff_label("Eating Disorder")  
-
-
-df.table$ADOS_module <- factor(df.table$ados_module)
-
-df.table$IQ <- df.table$IQ %>%
-  finalfit::ff_label("FSIQ")
-df.table$TOTCOMSC <- df.table$totcomsc %>%
-  finalfit::ff_label("Vineland (communication)")
-df.table$TOTSOCSC <- df.table$totsocsc %>%
-  finalfit::ff_label("Vineland (socialization)")
-df.table$TOTVIESC <- df.table$totviesc %>%
-  finalfit::ff_label("Vineland (daily life)")
-df.table$NCCA <- df.table$ncca %>%
-  finalfit::ff_label("Vineland (total)")
-```
-
-
-```{r, warning=FALSE}
-table1::table1(~ age + sex + 
-   diag_ADHD + diag_CD + diag_ODD + diag_MDD + diag_ANX + 
-     diag_DCD + diag_LD + diag_ED + diag_TCOND +
-     TS + IQ + NCCA + TOTCOMSC + TOTSOCSC + TOTVIESC | diag_ASD + ADOS_module,  
-   data = df.table, overall = "FALSE")
-```
-
-```{css, echo=FALSE, eval=knitr::is_html_output()}
-/* This CSS chunk only runs when knitting to HTML */
-hr {
-  margin-top: 35px;
-  margin-bottom: 35px;
-  border: 2px solid #2d2d2d;
+my.render.cont <- function(x) {
+  with(stats.apply.rounding(stats.default(x), digits = 2), c("",
+    "Mean (SD)"       = sprintf("%s (%s)", MEAN, SD),
+    "Median [Q1, Q3]" = sprintf("%s [%s, %s]", MEDIAN, Q1, Q3)
+  ))
 }
 ```
 
 
----
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+fmt_num <- function(x, digits = 3) formatC(x, digits = digits, format = "f")
+fmt_p   <- function(p) ifelse(p < .001, "< .001", formatC(p, digits = 3, format = "f"))
+fmt <- function(x) format(x, big.mark = ",")
+
+pvalue_cohen_or <- function(x, ...) {
+  if (length(x) > 2) {
+    nm <- tolower(names(x))
+    if (!is.null(nm)) x <- x[!nm %in% c("overall", "all", "total")]
+    if (length(x) > 2) x <- x[seq_len(2)]
+  }
+
+  v1     <- x[[1]]
+  vals   <- if (is.factor(v1) || is.character(v1) || is.logical(v1))
+              unlist(lapply(x, as.character)) else unlist(x)
+  g      <- factor(rep(seq_along(x), times = lengths(x)))
+  ok     <- !is.na(vals)
+  vals   <- vals[ok]; g <- droplevels(g[ok])
+  if (nlevels(g) != 2 || length(vals) < 2) return(c("", NA, "N/A"))
+
+  # catégoriel si type non numérique OU numérique binaire (0/1)
+  is_cat <- !is.numeric(vals) || length(unique(vals)) <= 2
+
+  if (!is_cat) {
+    y   <- vals
+    sds <- tapply(y, g, sd); means <- tapply(y, g, mean); ns <- table(g)
+    if (any(sds == 0, na.rm = TRUE)) return(c("", NA, "N/A (SD = 0)"))
+    pooled <- sqrt(((ns[1]-1)*sds[1]^2 + (ns[2]-1)*sds[2]^2) / (sum(ns)-2))
+    d      <- (means[1] - means[2]) / pooled
+    p      <- t.test(y ~ g, var.equal = TRUE)$p.value
+    es     <- paste0("d = ", fmt_num(d, 2))
+  } else {
+    tbl <- table(as.character(vals), g)
+    chi <- suppressWarnings(chisq.test(tbl))
+    p   <- chi$p.value
+    if (all(dim(tbl) == c(2, 2))) {
+      rn      <- tolower(rownames(tbl))
+      yes_row <- which(rn %in% c("yes", "y", "true", "t", "1", "oui"))
+      if (length(yes_row) != 1) yes_row <- 1L
+      no_row  <- setdiff(seq_len(2), yes_row)
+      m       <- tbl
+      if (any(m == 0)) m <- m + 0.5
+      or      <- (m[yes_row, 1] * m[no_row, 2]) /
+                 (m[no_row, 1]  * m[yes_row, 2])
+      cn      <- colnames(tbl)
+      es      <- paste0("OR = ", fmt_num(or, 2))
+    } else {
+      n  <- sum(tbl); k <- min(dim(tbl))
+      v  <- sqrt(chi$statistic / (n * (k - 1)))
+      es <- paste0("V = ", fmt_num(v, 2))
+    }
+  }
+  c("", fmt_p(p), es)
+}
+```
 
 
-# S3: Main analysis 1: Children
+```{r, echo=FALSE, warning=FALSE, results='hide', message=FALSE}
+dat<-readr::read_csv("dat.csv")
+```
 
-Function to facilitate calculations
+
+```{r Rename Variables, echo=FALSE, message=FALSE, warning=FALSE}
+# Variable numérique 0/1/NA -> facteur Yes/No avec label
+yesno_num <- function(x, label) {
+  case_when(
+    x >= 1   ~ "Yes",
+    x == 0   ~ "No",
+    is.na(x) ~ NA_character_
+  ) %>%
+    factor(levels = c("Yes", "No", NA)) %>%
+    ff_label(label)
+}
+
+# Variable texte "Yes"/"No"/"" -> facteur Yes/No/Missing avec label
+diag_fct <- function(x, label) {
+  factor(x,
+         levels = c("Yes", "No"),
+         labels = c("Yes", "No")) %>%
+    ff_label(label)
+}
+
+# Yes/No simple (sans Missing)
+yn_fct <- function(x, label) {
+  factor(x, levels = c("Yes", "No"), labels = c("Yes", "No")) %>%
+    ff_label(label)
+}
+
+
+
+data <- dat %>%
+  mutate(
+    # ---- Démographie -----------------------------------------------------
+    age       = age_years   %>% ff_label("Age (years)"),
+    sex       = factor(SEX) %>% ff_label("Sex"),
+    age_group = case_when(
+      modsaisi == 3 ~ "Children/Early adolescents",
+      modsaisi == 4 ~ "Late adolescents"
+    ) %>% ff_label("Age group"),
+
+    # ---- ADOS / ADI-R ----------------------------------------------------
+    ADOS_SA          = coalesce(A23AS,   ADOS_mod4_TOT) %>% ff_label("ADOS Social Affect"),
+    ADOS_RRB         = coalesce(A24CSIR, A23CRR)        %>% ff_label("ADOS RRB"),
+    ADOS_TOT         = ADOS_TOT          %>% ff_label("ADOS-2 - Total"),
+    ADI_DIAG_factor  = factor(ADI_DIAG)  %>% ff_label("ADI-R positive"),
+    ADI_ADOS_OR_Hus  = ifelse(ADI_DIAG == 1 | ADOS_DIAG_Hus == 1, 1, 0),
+    ADI_ADOS_AND_Hus = ifelse(ADI_DIAG == 1 & ADOS_DIAG_Hus == 1, 1, 0),
+
+    # ---- Wechsler --------------------------------------------------------
+    IQ  = IQ  %>% ff_label("FSIQ"),
+    ICV = ICV %>% ff_label("ICV"),
+    IRF = IRF %>% ff_label("IRF"),
+    IRP = IRP %>% ff_label("IRP"),
+    IMT = IMT %>% ff_label("IMT"),
+
+    # ---- Autres échelles -------------------------------------------------
+    SRS_hetero_tot_Tscore = SRS_hetero_tot_Tscore %>% ff_label("SRS-2 total (T-score)"),
+    TOTCOMSC   = totcomsc %>% ff_label("VABS - Communication"),
+    TOTSOCSC   = totsocsc %>% ff_label("VABS - Socialization"),
+    TOTVIESC   = totviesc %>% ff_label("VABS - Daily life"),
+    NCCA       = ncca_med %>% ff_label("VABS - Total"),
+    eq5d_score = as.numeric(as.character(eq5d_score)) %>% ff_label("EQ5D"),
+    cdi        = as.numeric(as.character(cdi))        %>% ff_label("CDI"),
+    bdi02      = as.numeric(as.character(bdi02))      %>% ff_label("BDI2"),
+    notb1      = as.numeric(as.character(notb1))      %>% ff_label("Dunn 1"),
+
+    # ---- Traitements en cours --------------------------------------------
+    TTT_ACTUEL_corr_cat = factor(
+      TTT_ACTUEL_corr_cat,
+      levels = c("At least one treatment", "no treatment"),
+      labels = c("At least one treatment", "No treatment")
+    ) %>% ff_label("Ongoing psychiatric treatment"),
+
+    TTT_CLASSE_ANTIPSYCHOTIQUE_ATYPIQUE_cat = yesno_num(TTT_CLASSE_ANTIPSYCHOTIQUE_ATYPIQUE, "Atypical Antipsychotic"),
+    TTT_CLASSE_MELATONINE_cat               = yesno_num(TTT_CLASSE_MELATONINE,               "Melatonin"),
+    TTT_CLASSE_METHYLPHENIDATE_cat          = yesno_num(TTT_CLASSE_METHYLPHENIDATE,          "Methylphenidate"),
+    TTT_CLASSE_ANTIPSY_TYPIQUE_cat          = yesno_num(TTT_CLASSE_ANTIPSY_TYPIQUE,          "Typical Antipsychotic"),
+    TTT_CLASSE_ISRS_cat                     = yesno_num(TTT_CLASSE_ISRS,                     "Selective Serotonin Reuptake Inhibitor - SSRI"),
+    TTT_CLASSE_ISRSNa_cat                   = yesno_num(TTT_CLASSE_ISRSNa,                   "Serotonin-Norepinephrine Reuptake Inhibitor - SNRI"),
+    TTT_CLASSE_HYPNOTIQUE_cat               = yesno_num(TTT_CLASSE_HYPNOTIQUE,               "Hypnotics and Sedatives"),
+    TTT_CLASSE_BENZO_cat                    = yesno_num(TTT_CLASSE_BENZO,                    "Benzodiazepin"),
+    TTT_CLASSE_ANXIOLYTIQUE_cat             = yesno_num(TTT_CLASSE_ANXIOLYTIQUE,             "Anxiolytic"),
+    TTT_CLASSE_ANTIEPILEPTIQUE_cat          = yesno_num(TTT_CLASSE_ANTIEPILEPTIQUE,          "Antiepileptic"),
+    TTT_CLASSE_LITHIUM_cat                  = yesno_num(TTT_CLASSE_LITHIUM,                  "Lithium"),
+    TTT_ANTIPSY_cat                         = yesno_num(TTT_ANTIPSY,                         "Antipsychotic"),
+    TTT_ANTIDEP_cat                         = yesno_num(TTT_ANTIDEP,                         "Antidepressant"),
+    TTT_ANXIO_BENZO_cat                     = yesno_num(TTT_ANXIO_BENZO,                     "Anxiolytics and Benzodiazepin"),
+
+    # ---- Comorbidités : neurodéveloppement / comportement ---------------
+    DIAG_ADHD = diag_fct(DIAG_ADHD, "Attention deficit hyperactivity disorder - ADHD"),
+    DIAG_ODD  = diag_fct(DIAG_ODD,  "Oppositional defiant disorder"),
+    DIAG_CD   = diag_fct(DIAG_CD,   "Conduct Disorder"),
+
+    # ---- Comorbidités : humeur ------------------------------------------
+    DIAG_MDD  = diag_fct(DIAG_MDD,  "Major Depressive Disorder"),
+    DIAG_MAN  = diag_fct(DIAG_MAN,  "Manic Episode"),
+    DIAG_HMAN = diag_fct(DIAG_HMAN, "HypoManic Episode"),
+    DIAG_MIX  = diag_fct(DIAG_MIX,  "Mixt Episode"),
+    DIAG_TDI  = diag_fct(DIAG_TDI,  "Isolated Depressive Disorder"),
+    DIAG_TDR  = diag_fct(DIAG_TDR,  "Recurrent Depressive Disorder"),
+    DIAG_TD   = diag_fct(DIAG_TD,   "Dysthymia"),
+    DIAG_TB   = diag_fct(DIAG_TB,   "Bipolar Disorder"),
+
+    # ---- Comorbidités : psychotique / substances ------------------------
+    DIAG_SYMPPSYH = diag_fct(DIAG_SYMPPSYH, "Psychotic Symptoms"),
+    DIAG_TSKIZO   = diag_fct(DIAG_TSKIZO,   "Schizophrenic Disorder"),
+    DIAG_UTISUBST = diag_fct(DIAG_UTISUBST, "Substance Use"),
+
+    # ---- Comorbidités : anxiété -----------------------------------------
+    DIAG_ANX    = diag_fct(DIAG_ANX,    "Anxiety Disorder"),
+    DIAG_PHSO   = diag_fct(DIAG_PHSO,   "Social Phobia Disorder (Anxiety Disorder subclass)"),
+    DIAG_TOC    = diag_fct(DIAG_TOC,    "Obsessive Compulsive Disorder (Anxiety Disorder subclass"),
+    DIAG_ANXGE  = diag_fct(DIAG_ANXGE,  "Generalised Anxiety Disorder (Anxiety Disorder subclass)"),
+    DIAG_ANXSEP = diag_fct(DIAG_ANXSEP, "Separation Anxiety (Anxiety Disorder subclass)"),
+    DIAG_PTSD   = diag_fct(DIAG_PTSD,   "Post Traumatic Stress Disorder - PTSD (Anxiety Disorder subclass)"),
+
+    # ---- Comorbidités : autres ------------------------------------------
+    DIAG_ED      = diag_fct(DIAG_ED,      "Eating Disorder"),
+    DIAG_TIC     = diag_fct(DIAG_TIC,     "Chronic Tic Disorder"),
+    DIAG_DCD     = diag_fct(DIAG_DCD,     "Developmental Coordination Disorder"),
+    DIAG_TCSFINC = diag_fct(DIAG_TCSFINC, "Sphincter Control Disorder"),
+
+    # ---- Comorbidités : langage -----------------------------------------
+    DIAG_LGE    = diag_fct(DIAG_LGE,    "Developmental Language Disorder"),
+    DIAG_PHONA  = diag_fct(DIAG_PHONA,  "Phonation Disorder"),
+    DIAG_BEG    = diag_fct(DIAG_BEG,    "Stuttering"),
+    DIAG_PRAGMA = diag_fct(DIAG_PRAGMA, "Pragmatic Disorder"),
+
+    # ---- Comorbidités : sommeil -----------------------------------------
+    DIAG_INSOM    = diag_fct(DIAG_INSOM,    "Insomnia"),
+    DIAG_HYPERSOM = diag_fct(DIAG_HYPERSOM, "Hypersomnia"),
+
+    # ---- Comorbidités : suicidalité / auto-mutilation -------------------
+    DIAG_SUICID     = diag_fct(DIAG_SUICID,     "Suicidal behaviours"),
+    DIAG_CPTAUTOMUT = diag_fct(DIAG_CPTAUTOMUT, "Self-harming Behaviors"),
+
+    # ---- Comorbidités : apprentissages ----------------------------------
+    DIAG_DYSL1  = diag_fct(DIAG_DYSL1,  "Dyslexia1"),
+    DIAG_DYSL2  = diag_fct(DIAG_DYSL2,  "Dyslexia2"),
+    DIAG_DYSCAL = diag_fct(DIAG_DYSCAL, "Dyscalculia"),
+    DIAG_DYSGR  = diag_fct(DIAG_DYSGR,  "Dysgraphia"),
+
+    # ---- Synthèses comorbidités -----------------------------------------
+    PSYCH_COMOR    = factor(PSYCH_COMOR,
+                            levels = c("Any", "None"),
+                            labels = c("Any", "None")) %>%
+      ff_label("Other psychiatric condition"),
+    PSYCH_COMOR_na = factor(PSYCH_COMOR_na,
+                            levels = c("Any", "None"),
+                            labels = c("Any", "None")) %>%
+      ff_label("Other psychiatric or neurodevelopmental condition"),
+
+    # ---- Diagnostic TSA --------------------------------------------------
+    ASD_DIAG     = cridsm26 %>% ff_label("Autism Spectrum Disorder - ASD"),
+    ASD_DIAG_cat = factor(cridsm26, levels = c("1", "0"), labels = c("ASD", "no ASD")) %>%
+      ff_label("Autism Spectrum Disorder - ASD")
+  ) %>%
+
+  # ---- Dates et délais ---------------------------------------------------
+  mutate(
+    ados_date  = as.Date(ados_date),
+    adir_date  = as.Date(adir_date),
+    visit_date = as.Date(svdtc, format = "%Y-%m-%d"),
+
+    time_btw_tests = case_when(
+      tool_first == "ADOS" ~ as.numeric(adir_date - ados_date),
+      tool_first == "ADIR" ~ as.numeric(ados_date - adir_date),
+      tool_first == "same" ~ 0,
+      is.na(tool_first)    ~ NA_real_
+    ),
+    time_btw_tests_cat = case_when(
+      time_btw_tests <  7 ~ "Less than 7 days",
+      time_btw_tests < 90 ~ "Less than 90 days",
+      time_btw_tests > 90 ~ "More than 90 days",
+      TRUE                ~ NA_character_
+    ),
+
+    time_to_diag = case_when(
+      tool_first == "ADOS" & ados_date <= visit_date ~ as.numeric(visit_date - ados_date),
+      tool_first == "ADOS" & ados_date >  visit_date ~ 666,
+      tool_first == "ADIR" & adir_date <= visit_date ~ as.numeric(visit_date - adir_date),
+      tool_first == "ADIR" & adir_date >= visit_date ~ 666,
+      tool_first == "same" & adir_date <= visit_date ~ as.numeric(visit_date - adir_date),
+      tool_first == "same" & adir_date >  visit_date ~ 666,
+      is.na(tool_first)                              ~ NA_real_
+    ),
+    time_to_diag_cat = case_when(
+      time_to_diag == 666 ~ "Tests after visit",
+      time_to_diag <   7  ~ "Less than 7 days",
+      time_to_diag <  90  ~ "Less than 90 days",
+      time_to_diag >  90  ~ "More than 90 days",
+      TRUE                ~ NA_character_
+    ),
+
+    age_sex_group = case_when(
+      modsaisi == 3 & SEX == "Male"   ~ "Children/Early Adolescents - Male",
+      modsaisi == 3 & SEX == "Female" ~ "Children/Early Adolescents - Female",
+      modsaisi == 4 & age_years >= 15 & age <= 25 & SEX == "Male"   ~ "Late Adolescents - Male",
+      modsaisi == 4 & age_years >= 15 & age <= 25 & SEX == "Female" ~ "Late Adolescents - Female"
+    )
+  ) %>%
+
+  # ---- Précision diagnostique et scores ADOS / ADI-R ---------------------
+  mutate(
+    ADOS_CORRECT = factor(ADOS_CORRECT,
+                          levels = c(TRUE, FALSE),
+                          labels = c("ADOS-2 correct", "ADOS-2 incorrect")) %>%
+      ff_label("ADOS-2 diagnostic accuracy"),
+    ADI_CORRECT  = factor(ADI_CORRECT,
+                          levels = c(TRUE, FALSE),
+                          labels = c("ADI-R correct", "ADI-R incorrect")) %>%
+      ff_label("ADI-R diagnostic accuracy"),
+
+    ADOS_CSS     = ADOS_CSS     %>% ff_label("ADOS-2 - CSS"),
+    ADOS_TOT_hus = ADOS_TOT_hus %>% ff_label("ADOS-2 - Total (Module 4 revised algorithm)"),
+    ADI_DSM5_sum = ADI_DSM5_sum %>% ff_label("ADI-R - DSM5 algorithm"),
+
+    ADI_TOTA_fin = ADI_TOTA_fin %>% ff_label("ADI-R - Total A"),
+    ADI_TOTB_fin = ADI_TOTB_fin %>% ff_label("ADI-R - Total B"),
+    ADI_TOTC_fin = ADI_TOTC_fin %>% ff_label("ADI-R - Total C"),
+    ADI_TOTD_fin = ADI_TOTD_fin %>% ff_label("ADI-R - Total D")
+  ) %>%
+
+  # ---- Regroupements diagnostiques ---------------------------------------
+  mutate(
+    DIAG_DISRU = case_when(
+      if_any(c(DIAG_ODD, DIAG_CD), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_ODD, DIAG_CD), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Oppositional Defiant Disorder and Conduct Disorder"),
+
+    DIAG_DEP = case_when(
+      if_any(c(DIAG_MDD, DIAG_TDI, DIAG_TDR), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_MDD, DIAG_TDI, DIAG_TDR), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Depressive disorders"),
+
+    DIAG_BIP = case_when(
+      if_any(c(DIAG_MAN, DIAG_HMAN, DIAG_MIX, DIAG_TD, DIAG_TB), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_MAN, DIAG_HMAN, DIAG_MIX, DIAG_TD, DIAG_TB), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Bipolar and related disorders"),
+
+    DIAG_SCZ = case_when(
+      if_any(c(DIAG_SYMPPSYH, DIAG_TSKIZO), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_SYMPPSYH, DIAG_TSKIZO), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Schizophrenia spectrum and Psychotic symptoms"),
+
+    DIAG_SLEEP = case_when(
+      if_any(c(DIAG_INSOM, DIAG_HYPERSOM), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_INSOM, DIAG_HYPERSOM), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Sleep-Wake disorders"),
+
+    DIAG_LAN = case_when(
+      if_any(c(DIAG_LGE, DIAG_BEG, DIAG_PHONA, DIAG_PRAGMA), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_LGE, DIAG_BEG, DIAG_PHONA, DIAG_PRAGMA), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Language disorders"),
+
+    DIAG_LEARN = case_when(
+      if_any(c(DIAG_DYSL1, DIAG_DYSL2, DIAG_DYSCAL, DIAG_DYSGR), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_DYSL1, DIAG_DYSL2, DIAG_DYSCAL, DIAG_DYSGR), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Learning disorders"),
+
+    DIAG_HARM = case_when(
+      if_any(c(DIAG_SUICID, DIAG_CPTAUTOMUT), ~ .x == "Yes") ~ "Yes",
+      if_all(c(DIAG_SUICID, DIAG_CPTAUTOMUT), ~ .x == "No")  ~ "No",
+      TRUE ~ NA_character_
+    ) %>% yn_fct("Self-harming and suicidal behaviors")
+  ) %>%
+
+  # ---- Nombre de classes de traitement -----------------------------------
+  rowwise() %>%
+  mutate(
+    TTT_nb = if (all(is.na(c(TTT_CLASSE_MELATONINE, TTT_CLASSE_METHYLPHENIDATE,
+                             TTT_ANTIPSY, TTT_ANTIDEP, TTT_ANXIO_BENZO)))) {
+      NA_real_
+    } else {
+      sum(c(TTT_CLASSE_MELATONINE, TTT_CLASSE_METHYLPHENIDATE,
+            TTT_ANTIPSY, TTT_ANTIDEP, TTT_ANXIO_BENZO), na.rm = TRUE)
+    },
+    TTT_nb_cat = case_when(
+      TTT_nb == 0 ~ "None",
+      TTT_nb == 1 ~ "1",
+      TTT_nb >= 2 ~ "2 to 5",
+      TRUE        ~ NA_character_
+    )
+  ) %>%
+  ungroup() %>%
+  mutate(TTT_nb_cat = factor(TTT_nb_cat) %>% ff_label("Number of treatment category"))
+```
+
+\newpage
+# S1. STARD checklist completed / Supplement 1
+\includegraphics[page=1, width=\textwidth]{STARD-2015-Checklist.pdf}
+\newpage
+
+\includegraphics[page=2, width=\textwidth]{STARD-2015-Checklist.pdf}
+
+\newpage
+
+\includegraphics[page=3, width=\textwidth]{STARD-2015-Checklist.pdf}
+
+\newpage
+# S2. Sample
+```{r Filtre Age, include=FALSE}
+dat_clean_age = data %>%
+  filter(age_years >= 6)
+
+
+dat_clean_iq = dat_clean_age %>%
+  filter(IQ >= 70 | is.na(IQ))
+
+dat_clean_tests <- dat_clean_iq  %>%
+  filter((modsaisi==3 | (modsaisi==4 & age_years>=15)) & !is.na(ADOS_DIAG) & adirelp!=2 & !is.na(ADI_DIAG) & !is.na(ADOS_CSS) & !is.na(ADOS_TOT_hus)) %>%
+  filter(dsaut01==0 | is.na(dsaut01))
+
+dat_fin<-dat_clean_tests
+```
+
+
+```{r Dataset age group, include=FALSE}
+dat_m3 <- dat_fin %>%
+  filter(modsaisi == 3) %>%
+  mutate(age_group = "Children/Early Adolescents")
+
+dat_m4 <- dat_fin %>%
+  filter(modsaisi == 4 & age_years>=15 & age_years <=25 ) %>%
+  mutate(age_group = "Late Adolescents")
+```
+
+
+## S2.1 Inclusion flowchart (Figure 1)
+```{r, include=FALSE}
+tiff("Figures/Flowchart.tiff",
+     width = 15, height = 10, units = "in", res = 1000,
+     compression = "lzw", type = "cairo")
+
+eli = nrow(dat)
+incl = nrow(dat_m3) + nrow(dat_m4)
+m3 = nrow(dat_m3)
+m4 = nrow(dat_m4)
+
+age = nrow(dat) - nrow(dat_clean_age)
+iq   = nrow(dat_clean_age) - nrow(dat_clean_iq)
+tests = nrow(dat_clean_iq) - nrow(dat_fin)
+
+tot  = age + iq + tests 
+
+eligible <- paste0("Assessed for eligibility \n N = ", fmt(eli))
+
+included <- paste0("Included in final analysis \n n = ", incl)
+
+grp_mod3 <- paste0("Children/Early adolescents - Module 3 (ADOS-2) \n n = ", m3)
+
+grp_mod4 <- paste0("Late adolescents - Module 4 (ADOS-2) \n n = ", m4)
+
+excluded <- paste0("Excluded, with reasons (n = ", tot, ") :", 
+                   "\n\u2022 Age exclusion criteria (<6 yo) : n = ", age, 
+                   "\n\u2022 ID diagnosis and FSIQ exclusion criteria (<70) : n = ", iq, 
+                   "\n\u2022 Missing ADOS-2/ADI-R data : n = ", tests)
+
+
+flowchart <- add_box(txt=eligible) |>
+  add_side_box(txt=excluded) |>
+  add_box(txt=included) |>
+  add_split(txt = c(grp_mod3, grp_mod4)) 
+
+
+plot(flowchart, txt_gp = gpar(fontfamily = "Times", fontsize = 12))
+
+dev.off()
+```
+
+
+```{r Flowchart, echo=FALSE, fig.height=6, fig.width=10}
+plot(flowchart, txt_gp = gpar(fontfamily = "Times", fontsize = 12))
+```
+
+<br><br>
+
+## S2.2 Excluded/Included sample characteristics for main analysis
+```{r message=FALSE, warning=FALSE}
+dat_clean_iq$inclusion_status <- ifelse(dat_clean_iq$subjid_identite %in% dat_fin$subjid_identite, "Included", "Excluded")
+
+tab_excluded_main<-table1::table1(~ age +  sex + IQ + ASD_DIAG_cat
+                     | inclusion_status ,  
+                     data = dat_clean_iq, 
+                     overall = FALSE, 
+                     render.continuous = my.render.cont,
+                     extra.col = list(`P-value - Effect Size` = pvalue_cohen_or),
+                     caption="Table S1. Excluded/Included Sample Characteristics for Main Analysis")
+
+tab_excluded_main
+
+
+summary(dat_clean_iq$IQ)
+
+res <- cor.test(dat_clean_iq$proxy_IQ, dat_clean_iq$IQ_primary)
+r_val <- round(res$estimate, 2)
+p_val <- round(res$p.value, 3)
+```
+
+The proxy measure showed a very high correlation with the full FSIQ scores in participants where both were available (r =`r r_val`, p =`r p_val`), supporting its validity.
+
+## S2.3 Age distribution 
+```{r Age distribution, echo=FALSE, fig.height=5, fig.width=8}
+ggplot(dat_fin, aes(x = age, fill = age_group)) +
+  geom_bar(position = "dodge", alpha = 0.8) +
+  scale_fill_manual(
+    values = c("#4E84C4", "#E07B54"),
+    labels = c("Children/Early adolescents", "Late adolescents")
+  ) +
+  scale_x_continuous(breaks = seq(min(dat_fin$age), max(dat_fin$age), by = 1)) +
+  
+  facet_wrap(~ age_group, ncol = 1) +
+  labs(
+    title = "Figure S1. Age Distribution by Age Group",
+    x = "Age (years)",
+    y = "Cases",
+    fill = NULL
+  ) +
+  theme_classic(base_size = 12) +
+  theme(legend.position = "none")
+```
+
+
+\newpage
+## S2.4 Demographics 
+
+### S2.4.1 Main sample characteristics by age group (Table 1)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab1<-table1::table1(~ age +  sex + 
+                       IQ + 
+                       NCCA + 
+                       ADOS_TOT + ADOS_TOT_hus + ADOS_CSS + 
+                       ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin +
+                       PSYCH_COMOR_na +
+                       TTT_ACTUEL_corr_cat 
+                       #TTT_nb_cat
+                     | age_group * ASD_DIAG_cat ,  
+                     data = dat_fin, 
+                     overall = FALSE) 
+
+set_flextable_defaults(
+  font.family = "Times New Roman",
+  font.size = 10,
+  padding.left = 2, 
+  padding.right = 2,
+  padding.bottom = 2, 
+  padding.top = 2,
+  background.color = "white"
+)
+
+
+ft <- t1flex(tab1)
+
+
+ft <- labelizor(
+  ft, 
+  j = 1, 
+  labels = function(x) gsub("\\.", " ", x), 
+  part = "body"
+)
+
+header_data <- as.matrix(ft$header$dataset)
+children_cols <- which(colSums(matrix(grepl("Children", header_data, ignore.case = TRUE), nrow = nrow(header_data))) > 0)
+
+col_labels <- ft$body$dataset[[1]]
+label_row_idx <- which(grepl("ADOS", col_labels, ignore.case = TRUE) & grepl("Hus", col_labels, ignore.case = TRUE))
+
+
+if(length(label_row_idx) > 0 && length(children_cols) > 0) {
+  stats_rows <- c(label_row_idx + 1, label_row_idx + 2)
+  stats_rows <- stats_rows[stats_rows <= nrow(ft$body$dataset)]
+  
+  ft <- mk_par(
+    ft, 
+    i = stats_rows, 
+    j = children_cols, 
+    value = as_paragraph("-")
+  )
+}
+
+
+n_cols <- ncol_keys(ft)
+
+ft_final <- ft %>%
+  theme_booktabs() %>%
+  align(align = "left", part = "all") %>%
+  align(j = 2:n_cols, align = "center", part = "all") %>%
+  flextable::font(fontname = "Times New Roman", part = "all") %>%
+  padding(padding = 2, part = "all") %>%
+  width(j = 1, width = 2.2) %>% 
+  width(j = 2:n_cols, width = 1.2) %>%
+  set_table_properties(layout = "fixed", width = 1)%>%
+  set_caption(
+    "Table 1. Summary of Main Clinical Characteristics of the Individuals Included in the Study"
+  ) %>%
+  add_footer_lines(
+    "Note: Values are mean (SD) for continuous variables and n (%) for categorical variables. Participants are stratified by age group - children/early adolescents assessed with ADOS-2 Module 3, and late adolescents assessed with Module 4 - and by final consensus diagnosis. ADI-R scores correspond to domain A (reciprocal social interaction), domain B (communication and language), and domain C (restricted and repetitive behaviors). ADOS-2 total scores are reported for both the original and the revised (Hus and Lord) Module 4 algorithms. The Vineland-II Adaptive Behavior Composite (VABS-2 - Total) is reported as a standard score. ADI-R = Autism Diagnostic Interview-Revised; ADOS-2 = Autism Diagnostic Observation Schedule, Second Edition; ASD = autism spectrum disorder; CSS = calibrated severity score; FSIQ = full-scale IQ; SD = standard deviation.")%>%
+  add_footer_lines(
+    "a The revised Module 4 algorithm was not applicable to children/early adolescents, who were assessed with Module 3."
+  ) 
+
+ft_final
+
+#save_as_docx(ft_final, path = "table1.docx")
+```
+
+\newpage
+### S2.4.2 ADOS-2 CSS age-group comparison
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+dat_CSS<-dat_fin%>%
+  filter(ASD_DIAG==1)
+
+summary_stats <- dat_CSS %>%
+  group_by(modsaisi) %>%
+  summarise(
+    N = n(),
+    Moyenne = mean(ADOS_CSS, na.rm = TRUE),
+    SD = sd(ADOS_CSS, na.rm = TRUE),
+    Mediane = median(ADOS_CSS, na.rm = TRUE),
+    Q1 = quantile(ADOS_CSS, 0.25, na.rm = TRUE),
+    Q3 = quantile(ADOS_CSS, 0.75, na.rm = TRUE)
+  )
+print(summary_stats)
+
+shapiro_test <- shapiro.test(dat_CSS$ADOS_CSS)
+print(shapiro_test)
+
+res_wilcox <- wilcox.test(ADOS_CSS ~ modsaisi, data = dat_CSS)
+print(res_wilcox)
+
+
+m_m3   <- round(summary_stats$Moyenne[1], 2)
+sd_m3  <- round(summary_stats$SD[1], 2)
+med_m3 <- round(summary_stats$Mediane[1], 2)
+q1_m3  <- round(summary_stats$Q1[1], 2)
+q3_m3  <- round(summary_stats$Q3[1], 2)
+
+m_m4   <- round(summary_stats$Moyenne[2], 2)
+sd_m4  <- round(summary_stats$SD[2], 2)
+med_m4 <- round(summary_stats$Mediane[2], 2)
+q1_m4  <- round(summary_stats$Q1[2], 2)
+q3_m4  <- round(summary_stats$Q3[2], 2)
+```
+
+The ADOS-2 Calibrated Severity Score `r ifelse(res_wilcox$p.value < 0.05, "differed significantly", "did not differ significantly")` between age groups with ASD (Wilcoxon-Mann-Whitney test, p = `r round(res_wilcox$p.value, 3)`). Children/early adolescents showed a mean score of `r m_m3` (SD = `r sd_m3`; Median = `r med_m3`, IQR: `r q1_m3`–`r q3_m3`), whereas late adolescents had a mean of `r m_m4` (SD = `r sd_m4`; Median = `r med_m4`, IQR: `r q1_m4`–`r q3_m4`). `r ifelse(res_wilcox$p.value < 0.05, ifelse(m_m3 > m_m4, "Children/early adolescents thus presented higher symptom severity scores than late adolescents.", "Late adolescents thus presented higher symptom severity scores than children/early adolescents."), "No notable difference in symptom severity was therefore observed across age groups.")`
+
+\newpage
+### S2.4.3 Psychiatric and neurodevelopmental condition
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s3<-table1::table1(~
+                      PSYCH_COMOR_na +
+                      DIAG_ANX +
+                      DIAG_ADHD+
+                      DIAG_DISRU +
+                      DIAG_TIC +
+                      DIAG_DEP +
+                      DIAG_BIP +
+                      DIAG_SCZ +
+                      DIAG_UTISUBST +
+                      DIAG_TCSFINC +
+                      DIAG_ED +
+                      DIAG_DCD+
+                      DIAG_LAN +
+                      DIAG_SLEEP +
+                      DIAG_HARM +
+                      DIAG_LEARN
+                 | age_group * ASD_DIAG_cat ,
+   data = dat_fin,
+   overall = FALSE)
+
+ft_s3 <- t1flex(tab_s3) %>%
+  theme_booktabs() %>%
+  set_caption("Table S3. Co-occurring Psychiatric and Neurodevelopmental Conditions by Age Group and Final Diagnosis") %>%
+  add_footer_lines("Note: Values are n (%). Co-occurring conditions were identified by experienced psychiatrists using a structured clinical interview according to DSM-5 criteria — the K-SADS-PL for children/early adolescents and the DIGS for late adolescents. Conditions are not mutually exclusive; participants could meet criteria for more than one. ADHD = attention-deficit/hyperactivity disorder; ADOS-2 = Autism Diagnostic Observation Schedule, Second Edition; ASD = autism spectrum disorder; DIGS = Diagnostic Interview for Genetic Studies; DSM-5 = Diagnostic and Statistical Manual of Mental Disorders, Fifth Edition; K-SADS-PL = Schedule for Affective Disorders and Schizophrenia for School-Age Children–Present and Lifetime Version.") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+ft_s3
+
+```
+
+\newpage
+### S2.4.4 Ongoing psychiatric treatments by therapeutic class
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s4<-table1::table1(~ TTT_ACTUEL_corr_cat +
+                        TTT_nb_cat +
+                      TTT_CLASSE_METHYLPHENIDATE_cat +
+                      TTT_CLASSE_MELATONINE_cat +
+                      TTT_ANTIPSY_cat +
+                      TTT_ANTIDEP_cat +
+                      TTT_ANXIO_BENZO_cat 
+                      # TTT_CLASSE_HYPNOTIQUE_cat +
+                      # TTT_CLASSE_ANTIEPILEPTIQUE_cat +
+                      # TTT_CLASSE_LITHIUM_cat
+                 | age_group * ASD_DIAG_cat ,   
+   data = dat_fin, 
+   overall = FALSE)
+
+
+ft_s4 <- t1flex(tab_s4) %>%
+  theme_booktabs() %>%
+  set_caption("Table S4. Ongoing Psychiatric Treatments by Therapeutic Class") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+ft_s4
+```
+
+\newpage
+### S2.4.5 Children/early adolescents group 
+#### S2.4.5.1 Main group characteristics
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s5<-table1::table1(~ age + sex + IQ +  
+                       TOTVIESC + TOTCOMSC+ TOTSOCSC + NCCA + 
+                       ADOS_TOT + ADOS_CSS + 
+                       ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin +
+                       PSYCH_COMOR_na +
+                       TTT_ACTUEL_corr_cat 
+                     | ASD_DIAG_cat ,  
+                     data = dat_m3, 
+                     overall = FALSE,
+                     extra.col = list(`P-value - Effect Size` = pvalue_cohen_or))
+
+
+ft_s5 <- t1flex(tab_s5) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  set_caption(
+    "Table S5. Summary of Main Clinical Characteristics of the Children/Early Adolescents Group "
+  ) 
+
+
+ft_s5 <- flextable::compose(ft_s5, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s5
+```
+
+\newpage
+#### S2.4.5.2 Psychiatric and neurodevelopmental conditions
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s6<-table1::table1(~  age +  sex +
+                      PSYCH_COMOR_na +
+                      DIAG_ANX + 
+                      DIAG_ADHD+ 
+                      DIAG_DISRU +
+                      DIAG_TIC +
+                      DIAG_DEP + 
+                      DIAG_BIP +
+                      DIAG_SCZ + 
+                      DIAG_UTISUBST +
+                      DIAG_TCSFINC + 
+                      DIAG_ED + 
+                      DIAG_DCD+
+                      DIAG_LAN +
+                      DIAG_SLEEP +
+                      DIAG_HARM +
+                      DIAG_LEARN
+                 |  ASD_DIAG_cat,  
+   data = dat_m3, 
+   overall = FALSE, 
+   extra.col = list(`P-value - Effect Size` = pvalue_cohen_or))
+
+ft_s6 <- t1flex(tab_s6) %>%
+  theme_booktabs() %>%
+  set_caption("Table S6. Co-occurring Psychiatric and Neurodevelopmental Conditions of the Children/Early Adolescents Group") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+ft_s6 <- flextable::compose(ft_s6, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s6
+```
+
+\newpage
+#### S2.4.5.3 Ongoing psychiatric treatments 
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s7 <-table1::table1(~  age +  sex +
+                      TTT_CLASSE_METHYLPHENIDATE_cat +
+                      TTT_CLASSE_MELATONINE_cat +
+                      TTT_ANTIPSY_cat +
+                      TTT_ANTIDEP_cat +
+                      TTT_ANXIO_BENZO_cat +
+                      TTT_CLASSE_HYPNOTIQUE_cat +
+                      TTT_CLASSE_ANTIEPILEPTIQUE_cat +
+                      TTT_CLASSE_LITHIUM_cat
+                 |  ASD_DIAG_cat,  
+   data = dat_m3, 
+   overall = FALSE, 
+   extra.col = list(`P-value - Effect Size` = pvalue_cohen_or))
+
+
+
+ft_s7 <- t1flex(tab_s7) %>%
+  theme_booktabs() %>%
+  set_caption("Table S7. Ongoing Psychiatric Treatments by Therapeutic Class of the Children/Early Adolescents Group") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+
+ft_s7 <- flextable::compose(ft_s7, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s7
+
+```
+
+\newpage
+### S2.4.6 Late adolescents group 
+#### S2.4.6.1 Main group characteristics
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s8<-table1::table1(~ age +  sex + IQ +  
+                        TOTVIESC + TOTCOMSC+ TOTSOCSC + NCCA + 
+                       ADOS_TOT + ADOS_TOT_hus + ADOS_CSS + 
+                       ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin +
+                       PSYCH_COMOR_na +
+                       TTT_ACTUEL_corr_cat 
+                     | ASD_DIAG_cat,  
+                     data = dat_m4, 
+                     overall = FALSE, 
+                     extra.col = list(`P-value - Effect Size` = pvalue_cohen_or))
+
+ft_s8 <- t1flex(tab_s8) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  set_caption(
+    "Table S8. Summary of Main Clinical Characteristics of the Late Adolescents Group  "
+  ) 
+
+
+ft_s8 <- flextable::compose(ft_s8, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s8
+```
+
+
+\newpage
+#### S2.4.6.2 Psychiatric and neurodevelopmental conditions 
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s9<-table1::table1(~ age +  sex +
+                      PSYCH_COMOR_na +
+                      DIAG_ANX + 
+                      DIAG_ADHD+ 
+                      DIAG_DISRU +
+                      DIAG_TIC +
+                      DIAG_DEP + 
+                      DIAG_BIP +
+                      DIAG_SCZ + 
+                      DIAG_UTISUBST +
+                      DIAG_TCSFINC + 
+                      DIAG_ED + 
+                      DIAG_DCD+
+                      DIAG_LAN +
+                      DIAG_SLEEP +
+                      DIAG_HARM +
+                      DIAG_LEARN
+                 |  ASD_DIAG_cat,  
+   data = dat_m4, 
+   overall = FALSE, 
+   extra.col = list(`P-value - Effect Size` = pvalue_cohen_or))
+
+ft_s9 <- t1flex(tab_s9) %>%
+  theme_booktabs() %>%
+  set_caption("Table S9. Co-occurring Psychiatric and Neurodevelopmental Conditions of the Late Adolescents Group") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+ft_s9 <- flextable::compose(ft_s9, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s9
+```
+
+\newpage
+#### S2.4.6.3 Ongoing psychiatric treatments 
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+tab_s10 <-table1::table1(~ TTT_ACTUEL_corr_cat +
+                      TTT_CLASSE_METHYLPHENIDATE_cat +
+                      TTT_CLASSE_MELATONINE_cat +
+                      TTT_ANTIPSY_cat +
+                      TTT_ANTIDEP_cat +
+                      TTT_ANXIO_BENZO_cat +
+                      TTT_CLASSE_HYPNOTIQUE_cat +
+                      TTT_CLASSE_ANTIEPILEPTIQUE_cat +
+                      TTT_CLASSE_LITHIUM_cat
+                 |  ASD_DIAG_cat,  
+   data = dat_m4, 
+   overall = FALSE, 
+   extra.col = list(`P-value - Effect Size` = pvalue_cohen_or))
+
+
+
+ft_s10 <- t1flex(tab_s10) %>%
+  theme_booktabs() %>%
+  set_caption("Table S10. Ongoing Psychiatric Treatments by Therapeutic Class the Late Adolescents Group") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+
+ft_s10 <- flextable::compose(ft_s10, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s10
+
+```
+
+\newpage
+### S2.4.7 Main characteristics by ADOS-2 accuracy tables 
+#### S2.4.7.1 Children/early adolescents group 
 ```{r}
+tab_s11<-table1::table1(~ age +  sex +IQ + TOTSOCSC + NCCA + ADOS_TOT + 
+                         ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin +
+                      PSYCH_COMOR_na +
+                      TTT_ACTUEL_corr_cat 
+                     | ADOS_CORRECT * ASD_DIAG_cat,  
+                     data = dat_m3, 
+                     overall = FALSE) 
+
+
+
+
+ft_s11 <- t1flex(tab_s11) %>%
+  theme_booktabs() %>%
+  set_caption("Table S11. Main characteristics by ADOS-2 accuracy tables for Children/early adolescents group") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+
+ft_s11 <- flextable::compose(ft_s11, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s11
+
+```
+
+\newpage
+#### S2.4.7.2 Late adolescents group 
+```{r}
+tab_s12<-table1::table1(~ age +  sex +IQ + TOTSOCSC + NCCA + ADOS_TOT +  ADOS_TOT_hus +
+                         ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin +
+                      PSYCH_COMOR_na +
+                      TTT_ACTUEL_corr_cat 
+                     | ADOS_CORRECT * ASD_DIAG_cat,  
+                     overall = FALSE, 
+                     data = dat_m4) 
+
+ft_s12 <- t1flex(tab_s12) %>%
+  theme_booktabs() %>%
+  set_caption("Table S12. Main characteristics by ADOS-2 accuracy tables for Late adolescents group") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+
+ft_s12 <- flextable::compose(ft_s12, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s12
+
+```
+
+\newpage
+### S2.4.8 Main characteristics by ADI-R accuracy tables 
+#### S2.4.8.1 Children/early adolescents group 
+```{r}
+tab_s13<-table1::table1(~ age +  sex +IQ + TOTSOCSC + NCCA + ADOS_TOT +  
+                         ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin + 
+                      PSYCH_COMOR_na +
+                      TTT_ACTUEL_corr_cat 
+                     | ADI_CORRECT * ASD_DIAG_cat,  
+                     overall = FALSE,
+                     data = dat_m3) 
+
+ft_s13 <- t1flex(tab_s13) %>%
+  theme_booktabs() %>%
+  set_caption("Table S13. Main characteristics by ADI-R accuracy tables for Children/early adolescents group") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+
+ft_s13 <- flextable::compose(ft_s13, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s13
+```
+
+\newpage
+#### S2.4.8.2 Late adolescents group 
+```{r}
+tab_s14<-table1::table1(~ age +  sex +IQ + TOTSOCSC + NCCA + ADOS_TOT +  ADOS_TOT_hus +
+                         ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin + 
+                      PSYCH_COMOR_na +
+                      TTT_ACTUEL_corr_cat 
+                     | ADI_CORRECT * ASD_DIAG_cat,  
+                     data = dat_m4, 
+                     overall = FALSE) 
+
+ft_s14 <- t1flex(tab_s14) %>%
+  theme_booktabs() %>%
+  set_caption("Table S14. Main characteristics by ADI-R accuracy tables for Late adolescents group") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+
+ft_s14 <- flextable::compose(ft_s14, i = 1, j = 4, part = "header",
+                 value = as_paragraph("P value / Effect size"))
+
+ft_s14
+```
+
+\newpage
+# S3. Main analysis 
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
 test_metrics = function(x, test, age) {
   res = testCompareR::summariseR(x, dp=3)
   rawres = data.frame(rbind(
@@ -433,52 +1122,53 @@ test_metrics = function(x, test, age) {
   rownames(rawres)[rownames(rawres) == "PLR"] <- "LR+"
   return(rawres)
 }
+
 ```
 
-## Individual{.tabset}
 
-### Children: ADI-R (Module 3)
+\newpage
+## S3.1 Children / early adolescents group
+### S3.1.1 Individual 
+
+#### ADI-R (Module 3)
 ```{r}
-#
 resa1 = test_metrics(dat_m3 %>% select(ADI_DIAG, ASD_DIAG),
                       "ADI-R",
                       "Children/Early adolescents")
 print(resa1)
-# Epi::ROC(form = ASD_DIAG ~ ADI_DIAG, plot="ROC", data=dat_m3)
 ```
 
-### Children: ADOS-2 (Module 3)
+#### ADOS-2 (Module 3)
 ```{r}
 resa2 = test_metrics(dat_m3 %>% select(ADOS_DIAG, ASD_DIAG),
                      "ADOS-2",
                      "Children/Early adolescents")
 print(resa2)
-# Epi::ROC(form = ASD_DIAG ~ ADOS_DIAG, plot="ROC", data=dat_m3)
 ```
 
-## Combination{.tabset}
+\newpage
+### S3.1.2 Combination 
 
-### Children: ADOS-2 + ADI-R (OR) - Module 3
+#### ADOS-2 + ADI-R (OR) - Module 3
 ```{r}
-#{.tabset}
-
-# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_OR, plot="ROC", data=dat_m3)
 resa4 = test_metrics(dat_m3 %>% select(ADI_ADOS_OR, ASD_DIAG),
-                     "ADOS-2+ADI-R (OR)",
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
                      "Children/Early adolescents")
 print(resa4)
 ```
 
-### Children: ADOS-2 + ADI-R (AND) - Module 3
+#### ADOS-2 + ADI-R (AND) - Module 3
 ```{r}
-# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_AND, plot="ROC", data=dat_m3)
 resa5 = test_metrics(dat_m3 %>% select(ADI_ADOS_AND, ASD_DIAG),
-                     "ADOS-2+ADI-R (AND)",
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
                      "Children/Early adolescents")
 print(resa5)
 ```
 
-## Comparison
+\newpage
+### S3.1.3 Comparison 
+
+#### Individual
 ```{r}
 testCompareR::compareR(
   df = dat_m3,
@@ -490,6 +1180,7 @@ testCompareR::compareR(
   test.names = c("ADI-R", "ADOS-2"))
 ```
 
+#### Combination vs ADI-R
 ```{r}
 testCompareR::compareR(
   df = dat_m3,
@@ -508,9 +1199,9 @@ testCompareR::compareR(
   ppvnpv = FALSE,
   interpret = FALSE,
   test.names = c("ADI-R", "COMB (AND)"))
-
 ```
 
+#### Combination vs ADOS-2
 ```{r}
 testCompareR::compareR(
   df = dat_m3,
@@ -532,55 +1223,52 @@ testCompareR::compareR(
 
 ```
 
----
 
-# S4: Main analysis 2: Adults
+\newpage
+## S3.2 Late adolescents group
+### S3.2.1 Individual 
 
-## Individual{.tabset}
-
-### Adults: ADI-R (Module 3)
+#### ADI-R (Module 4)
 ```{r}
-# {.tabset}
 resb1 = test_metrics(dat_m4 %>% select(ADI_DIAG, ASD_DIAG),
                       "ADI-R",
-                      "Late adolescents/Adults")
+                      "Late adolescents")
 print(resb1)
-# Epi::ROC(form = ASD_DIAG ~ ADI_DIAG, plot="ROC", data=dat_m4)
 ```
 
-### Adults: ADOS-2 (Module 3)
+#### ADOS-2 (Module 4)
 ```{r}
 resb2 = test_metrics(dat_m4 %>% select(ADOS_DIAG, ASD_DIAG),
                      "ADOS-2",
-                     "Late adolescents/Adults")
+                     "Late adolescents")
 print(resb2)
-# Epi::ROC(form = ASD_DIAG ~ ADOS_DIAG, plot="ROC", data=dat_m4)
 ```
 
-## Combination{.tabset}
+\newpage
+### S3.2.2 Combination 
 
-### Adults: ADOS-2 + ADI-R (OR) - Module 3
+#### ADOS-2 + ADI-R (OR) - Module 4
 ```{r}
-# {.tabset}
-# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_OR, plot="ROC", data=dat_m4)
 resb4 = test_metrics(dat_m4 %>% select(ADI_ADOS_OR, ASD_DIAG),
-                     "ADOS-2+ADI-R (OR)",
-                     "Late adolescents/Adults")
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Late adolescents")
 print(resb4)
 ```
 
-### Adults: ADOS-2 + ADI-R (AND) - Module 3
+#### ADOS-2 + ADI-R (AND) - Module 4
 ```{r}
-# Epi::ROC(form = ASD_DIAG ~ ADI_ADOS_AND, plot="ROC", data=dat_m4)
 resb5 = test_metrics(dat_m4 %>% select(ADI_ADOS_AND, ASD_DIAG),
-                     "ADOS-2+ADI-R (AND)",
-                     "Late adolescents/Adults")
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Late adolescents")
 print(resb5)
 ```
 
-## Comparison
+\newpage
+### S3.2.3 Comparison 
+
+#### Individual
 ```{r}
-testCompareR::compareR(
+result<-testCompareR::compareR(
   df = dat_m4,
   test1 = "ADI_DIAG",
   test2 = "ADOS_DIAG",
@@ -590,6 +1278,7 @@ testCompareR::compareR(
   test.names = c("ADI-R", "ADOS-2"))
 ```
 
+#### Combination vs ADI-R
 ```{r}
 testCompareR::compareR(
   df = dat_m4,
@@ -608,9 +1297,9 @@ testCompareR::compareR(
   ppvnpv = FALSE,
   interpret = FALSE,
   test.names = c("ADI-R", "COMB (AND)"))
-
 ```
 
+#### Combination vs ADOS-2
 ```{r}
 testCompareR::compareR(
   df = dat_m4,
@@ -633,20 +1322,19 @@ testCompareR::compareR(
 ```
 
 
----
-
-
-# S5. Main analysis: visualization
-```{r,echo=FALSE, fig.width=12, fig.height=7}
+\newpage
+## S3.3 Summary visualisation
+```{r, include=FALSE}
 resa = dplyr::bind_rows(
   resa1, resa2, resa4, resa5, 
-  resb1, resb2, resb4, resb5  
+  resb1, resb2, resb4, resb5,  
 ) %>%
   rownames_to_column("Psych") %>%
   mutate(Psych = gsub("[0-9]","", gsub("\\.", "", Psych)),
-         subG = paste0(Psych, " (", Age, ")"))
+         subG = paste0(Psych, " (", Age, ")"))%>%
+  arrange(Test, Psych, Age)
 
-# Create forest plots
+
 res_LR = meta::metagen(
   TE=Estimate, lower=Lower.CI, upper=Upper.CI,
   data=subset(resa, grepl("LR", subG, fixed=TRUE)),
@@ -660,11 +1348,18 @@ res_sesp = meta::metagen(
   subgroup=Test,
   studlab = Age
 )
+```
+
+### S3.3.1 Sensitivity and specificity of the ADI-R, ADOS-2, and their combination, for each age group (Figure 2)
+```{r,include=FALSE}
+tiff("Figures/Figure2.tiff",
+     width = 12, height = 10, units = "in", res = 1000,
+     compression = "lzw", type = "cairo")
+
 meta::forest(
   smlab = "",
   res_sesp,
   digits = 2,
-  # layout = "RevMan",
   weight.study = "same",
   xlim = c(25, 100),
   common = FALSE,
@@ -683,7 +1378,42 @@ meta::forest(
   subgroup.name = ""
 )
 
-# Plot Likelihood Ratios
+dev.off()
+```
+
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  smlab = "",
+  res_sesp,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+
+```
+
+### S3.3.2 Likelihood ratios of the ADI-R, ADOS-2, and their combination, for each age group (Figure 3)
+```{r,include=FALSE}
+tiff("Figures/Figure3.tiff",
+     width = 12, height = 10, units = "in", res = 1000,
+     compression = "lzw", type = "cairo")
+
+
 meta::forest(
   res_LR,
   digits = 2,
@@ -701,60 +1431,199 @@ meta::forest(
   rightlabs = c("Value and 95% CI"),
   subgroup.name = ""
 )
-
-# Plot Sensitivity and Specificity
+dev.off()
 ```
 
 
----
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  res_LR,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+```
 
-# S6. Exploratory analysis
+### S3.3.3 Children/early adolescents vs late adolescents ADOS-2 sensitivity
+```{r, include=FALSE}
+m3_asd    <- dat_m3 %>% filter(ASD_DIAG == 1, !is.na(ADOS_DIAG))
+m4_asd    <- dat_m4 %>% filter(ASD_DIAG == 1, !is.na(ADOS_DIAG))
+m3_nonasd <- dat_m3 %>% filter(ASD_DIAG == 0, !is.na(ADOS_DIAG))
+m4_nonasd <- dat_m4 %>% filter(ASD_DIAG == 0, !is.na(ADOS_DIAG))
 
-```{r}
-library(ggplot2)
-library(broom)
-library(dplyr)
-dat_m3$age_years_std = as.numeric(scale(dat_m3$age_years))
-dat_m3$IQ_std = as.numeric(scale(dat_m3$IQ))
-dat_m3$Vineland_std = as.numeric(scale(dat_m3$Vineland))
+x_sens <- c(sum(m3_asd$ADOS_DIAG    == 1), sum(m4_asd$ADOS_DIAG    == 1))
+n_sens <- c(nrow(m3_asd),                  nrow(m4_asd))
 
-dat_m4$age_years_std = as.numeric(scale(dat_m4$age_years))
-dat_m4$IQ_std = as.numeric(scale(dat_m4$IQ))
-dat_m4$Vineland_std = as.numeric(scale(dat_m4$Vineland))
+x_spec <- c(sum(m3_nonasd$ADOS_DIAG == 0), sum(m4_nonasd$ADOS_DIAG == 0))
+n_spec <- c(nrow(m3_nonasd),               nrow(m4_nonasd))
+
+ci_group <- function(xi, ni) {
+  ci <- prop.test(xi, ni, correct = FALSE)$conf.int
+  c(prop = xi / ni, lower = ci[1], upper = ci[2])
+}
+
+# === Sensibilité ===
+sens_m3   <- ci_group(x_sens[1], n_sens[1])
+sens_m4   <- ci_group(x_sens[2], n_sens[2])
+test_sens <- prop.test(x_sens, n_sens, correct = FALSE)
+
+# === Spécificité ===
+spec_m3   <- ci_group(x_spec[1], n_spec[1])
+spec_m4   <- ci_group(x_spec[2], n_spec[2])
+test_spec <- prop.test(x_spec, n_spec, correct = FALSE)
 
 
+print_block <- function(label, p_m3, p_m4, x, n, test) {
+  cat(sprintf(
+"%s
+  Children/early adolescents : %d/%d = %.1f%% [95%% CI %.1f-%.1f]
+  Late adolescents           : %d/%d = %.1f%% [95%% CI %.1f-%.1f]
+  Difference (m3 - m4) = %+.1f points [95%% CI %.1f to %.1f]
+  Chi-squared(%d) = %.3f, p = %s
+
+",
+    label,
+    x[1], n[1], 100*p_m3["prop"], 100*p_m3["lower"], 100*p_m3["upper"],
+    x[2], n[2], 100*p_m4["prop"], 100*p_m4["lower"], 100*p_m4["upper"],
+    100*(p_m3["prop"] - p_m4["prop"]),
+    100*test$conf.int[1], 100*test$conf.int[2],
+    test$parameter, test$statistic,
+    format.pval(test$p.value, digits = 3, eps = 0.001)
+  ))
+}
+
+cat("\n=== ADOS-2: Comparison between age groups ===\n\n")
+print_block("ADOS-2 SENSITIVITY (true positives / ASD cases)",
+            sens_m3, sens_m4, x_sens, n_sens, test_sens)
+print_block("ADOS-2 SPECIFICITY (true negatives / non-ASD cases)",
+            spec_m3, spec_m4, x_spec, n_spec, test_spec)
+
+
+make_sentence <- function(metric, p_m3, p_m4, test) {
+  glue::glue(
+    "ADOS-2 {metric} was {round(100*p_m3['prop'],1)}% ",
+    "(95% CI {round(100*p_m3['lower'],1)}-{round(100*p_m3['upper'],1)}) ",
+    "in children/early adolescents and {round(100*p_m4['prop'],1)}% ",
+    "(95% CI {round(100*p_m4['lower'],1)}-{round(100*p_m4['upper'],1)}) ",
+    "in late adolescents (difference = {round(100*(p_m3['prop']-p_m4['prop']),1)} ",
+    "percentage points, 95% CI {round(100*test$conf.int[1],1)} to ",
+    "{round(100*test$conf.int[2],1)}; chi2 = {round(test$statistic,2)}, ",
+    "p = {format.pval(test$p.value, digits=3, eps=0.001)})."
+  )
+}
+
+make_sentence("sensitivity", sens_m3, sens_m4, test_sens)
+make_sentence("specificity", spec_m3, spec_m4, test_spec)
+```
+
+`r make_sentence("sensitivity", sens_m3, sens_m4, test_sens)`
+
+`r make_sentence("specificity", spec_m3, spec_m4, test_spec)`
+
+
+\newpage
+# S4. Exploratory analysis : Age, sex and FSIQ
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+dat_m3_explo<-dat_m3%>%
+  mutate(age_years_std = as.numeric(scale(age_years)),
+         IQ_std = as.numeric(scale(IQ)),
+         IMT_std = as.numeric(scale(IMT)),
+         Vineland_std = as.numeric(scale(NCCA)),
+         Vineland_soc_std = as.numeric(scale(TOTSOCSC)),
+         PSYCH_COMOR_cat = case_when(PSYCH_COMOR_na=="Any" ~ 1,
+                               PSYCH_COMOR_na=="None" ~0,
+                               TRUE ~ NA_real_),
+         SRS_std = as.numeric(scale(SRS_hetero_tot_Tscore)))%>%
+  filter(!is.na(age_years) & !is.na(IQ))
+
+
+
+dat_m4_explo<-dat_m4 %>%
+    mutate(age_years_std = as.numeric(scale(age_years)),
+         IQ_std = as.numeric(scale(IQ)),
+         IMT_std = as.numeric(scale(IMT)),
+         Vineland_std = as.numeric(scale(NCCA)),
+         Vineland_soc_std = as.numeric(scale(TOTSOCSC)),
+         PSYCH_COMOR_cat = case_when(PSYCH_COMOR_na=="Any" ~ 1,
+                               PSYCH_COMOR_na=="None" ~0,
+                               TRUE ~ NA_real_),
+         SRS_std = as.numeric(scale(SRS_hetero_tot_Tscore)))%>%
+  filter(!is.na(age_years) & !is.na(IQ) )
+```
+
+
+## S4.1 Excluded/Included sample characteristics for exploratory analysis 
+```{r, include=FALSE}
+dat_included_explo<-dat_fin%>%
+  filter(!is.na(age_years) & !is.na(IQ))
+
+dat_fin$inclusion_status_explo <- ifelse(dat_fin$subjid_identite %in% dat_included_explo$subjid_identite, "Exploratory analysis included", "Exploratory analysis excluded")
 ```
 
 
 ```{r}
-library(purrr)
-library(dplyr)
-library(broom)
+tab_excluded_explo<-table1::table1(~ age +  sex +  
+                                     ASD_DIAG_cat +
+                                     NCCA + 
+                                     ADOS_TOT + ADOS_CSS +
+                                     ADI_TOTA_fin + ADI_TOTB_fin + ADI_TOTC_fin
+                     | inclusion_status_explo ,  
+                     data = dat_fin, 
+                     overall = FALSE, 
+                     extra.col = list(
+                              `P-value - Effect Size` = pvalue_cohen_or))
+tab_excluded_explo
 
-model_formula <- as.formula("OUTCOME ~ age_years_std + IQ_std + SEX + PSYCH_COMOR")
 
+ft_s2 <- t1flex(tab_excluded_explo) %>%
+  theme_booktabs() %>%
+  set_caption("Table S2. Excluded/Included Sample Characteristics for Exploratory Analysis ") %>%
+  add_footer_lines("Note: Values are n (%).") %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  align(align = "left", part = "footer") %>%
+  autofit()
+
+ft_s2
+```
+
+
+## S4.2 Factors associated with diagnostic accuracy (Figure 4)
+```{r}
 model_configs <- tribble(
   ~data, ~outcome, ~age_group, ~test,
-  "dat_m3", "ADI_CORRECT", "Children", "ADI-R",
-  "dat_m3", "ADOS_CORRECT", "Children", "ADOS-2", 
-  # "dat_m3", "ADI_ADOS_OR_CORRECT", "Children", "ADI | ADOS",
-  # "dat_m3", "ADI_ADOS_AND_CORRECT", "Children", "ADI & ADOS", 
-  "dat_m4", "ADI_CORRECT", "Adults", "ADI-R",
-  "dat_m4", "ADOS_CORRECT", "Adults", "ADOS-2",
-  # "dat_m4", "ADI_ADOS_OR_CORRECT", "Adults", "ADI | ADOS",
-  # "dat_m4", "ADI_ADOS_AND_CORRECT", "Adults", "ADI & ADOS"
+  "dat_m3_explo", "ADI_CORRECT", "Children/Early adolescents", "ADI-R",
+  "dat_m3_explo", "ADOS_CORRECT", "Children/Early adolescents", "ADOS-2",
+  "dat_m3_explo", "ADI_ADOS_OR_CORRECT", "Children/Early adolescents", "Combination OR",
+  "dat_m3_explo", "ADI_ADOS_AND_CORRECT", "Children/Early adolescents", "Combination AND",
+  
+  "dat_m4_explo", "ADI_CORRECT", "Late adolescents", "ADI-R",
+  "dat_m4_explo", "ADOS_CORRECT", "Late adolescents", "ADOS-2",
+  "dat_m4_explo", "ADI_ADOS_OR_CORRECT", "Late adolescents", "Combination OR",
+  "dat_m4_explo", "ADI_ADOS_AND_CORRECT", "Late adolescents", "Combination AND"
 )
 
 fit_and_extract_robust <- function(data_name, outcome, age_group, test) {
   data_original <- get(data_name)
   
-  model_vars <- c(outcome, "age_years_std", "IQ_std", "SEX", "PSYCH_COMOR")
+  model_vars <- c(outcome, "age_years_std", "SEX", "IQ_std") 
   
   model_data <- data_original %>%
     select(all_of(model_vars)) %>%
     na.omit()
 
-    formula_str <- paste(outcome, "~", "age_years_std + IQ_std + SEX + PSYCH_COMOR")
+    formula_str <- paste(outcome, "~", "age_years_std + SEX+ IQ_std ") 
   
   model_fml <- as.formula(formula_str)
   
@@ -768,14 +1637,8 @@ fit_and_extract_robust <- function(data_name, outcome, age_group, test) {
       sample_size = nobs(model),
       term = recode(term,
                     "age_years_std" = "Age",
-                    "SEXFemale" = "Female vs Male",
-                    "PSYCH_COMOR" = "Any comorbidity",
-                    "IQ_std" = "Full-Scale IQ",
-                    "DIAG_ADHD" = "ADHD",
-                    "Vineland_std" = "Vineland",
-                    "DIAG_ANX" = "Anxiety",
-                    "DIAG_MDD" = "Depression",
-                    "DIAG_SUICID" = "Suicidality"
+                    "SEX" = "Female vs Male",
+                    "IQ_std" = "Full-Scale IQ"
       )
     )
   
@@ -787,7 +1650,7 @@ dat_reg <- model_configs %>%
 
 dat_reg <- dat_reg %>%
   mutate(
-    group_label = paste0(Age, " - ", Test, "\n(n=", sample_size, ")")
+    group_label = paste0(Test, " - ", Age, "\n(n=", sample_size, ")")
   )
 
 dat_reg_clipped <- dat_reg %>%
@@ -798,140 +1661,1120 @@ dat_reg_clipped <- dat_reg %>%
 ```
 
 
-```{r}
-library(ggplot2)
-# library(showtext)
-# library(sysfonts)
+```{r, echo=FALSE, fig.width=12, fig.height=10}
+tiff("Figures/Figure4.tiff",
+     width = 12, height = 10, units = "in", res = 1000,
+     compression = "lzw", type = "cairo")
 
-# font_add_google("Roboto", "roboto")
-# showtext_auto()
 
-ggplot(dat_reg_clipped, aes(x = estimate, y = reorder(term, estimate))) +
+fig4<-ggplot(dat_reg_clipped, aes(x = estimate, y = reorder(term, estimate))) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
   geom_point(size = 4,
            shape=22, fill="#949494", color="#262626") +
-  geom_errorbarh(aes(xmin = conf.low_clipped, xmax = conf.high_clipped), size= 0.7, height = 0.01) +
-  facet_wrap(~ group_label, nrow = 2) +
-  xlim(-1.5, 1.5) +
+  geom_errorbarh(aes(xmin = conf.low_clipped, xmax = conf.high_clipped), linewidth= 0.7, height = 0.01) +
+  facet_wrap(~ group_label, nrow = 4) +
+  xlim(-1.7,1.7) +
   labs(x = "Standardized regression coefficients", y = "") +
-  theme_bw() +
-  theme(strip.text = element_text(size = 9))
+  theme_bw(base_size = 12, base_family = "Times") + 
+  theme(strip.text = element_text(size = 12)) 
 
-```
+print(fig4)
 
+dev.off()
 
-
-
-```{r}
 dat_reg %>%
   filter(p.value < 0.10) %>%
   arrange(term, Age, Test) %>%
+  mutate(
+    estimate  = exp(estimate),
+    conf.low  = exp(conf.low),
+    conf.high = exp(conf.high)
+  ) %>%
   select(term, Age, Test, estimate, p.value, conf.low, conf.high) %>%
-  kbl() %>%
-    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
-    scroll_box(width = "100%", height = "500px")
+  kbl(booktabs = TRUE, digits = 3) %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"))
 ```
 
+
+
+\newpage
+\begingroup
+\titlespacing*{\subsubsection}{0pt}{6pt}{2pt}
+\setlength{\intextsep}{4pt}
+\setlength{\textfloatsep}{4pt}
+# S5. Sensitivity analysis - Supplement 2
+
+## S5.1 Speech/occupational therapist influence
+```{r, include=FALSE}
+dat_m3_speech <- dat_m3 %>%
+  filter(centre=="DEBRE")
+
+dat_m3_nospeech <- dat_m3 %>%
+  filter(centre!="DEBRE")
+```
+
+Within the children/early adolescents subgroup, n = `r nrow(dat_m3_speech)` had a speech/occupational therapist involved in their diagnostic team, compared with n = `r nrow(dat_m3_nospeech)` who did not.
+
+```{r, include=FALSE}
+resa1_speech = test_metrics(dat_m3_speech %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "With Speech / Occupational therapist")
+print(resa1_speech)
+
+resa2_speech = test_metrics(dat_m3_speech %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "With Speech / Occupational therapist")
+print(resa2_speech)
+
+
+
+
+resa1_nospeech = test_metrics(dat_m3_nospeech %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Without Speech / Occupational therapist")
+print(resa1_nospeech)
+
+resa2_nospeech = test_metrics(dat_m3_nospeech %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Without Speech / Occupational therapist")
+print(resa2_nospeech)
+```
+
+```{r, include=FALSE}
+resa4_speech = test_metrics(dat_m3_speech %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "With Speech / Occupational therapist")
+print(resa4_speech)
+
+
+resa5_speech = test_metrics(dat_m3_speech %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "With Speech / Occupational therapist")
+print(resa5_speech)
+
+
+
+resa4_nospeech = test_metrics(dat_m3_nospeech %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Without Speech / Occupational therapist")
+print(resa4_nospeech)
+
+
+resa5_nospeech = test_metrics(dat_m3_nospeech %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Without Speech / Occupational therapist")
+print(resa5_nospeech)
+```
+
+```{r, include=FALSE}
+testCompareR::compareR(
+  df = dat_m3_speech,
+  test1 = "ADI_DIAG",
+  test2 = "ADOS_DIAG",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "ADOS-2"))
+```
+
+```{r, include=FALSE}
+testCompareR::compareR(
+  df = dat_m3_speech,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m3_speech,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (AND)"))
+
+```
+
+```{r, include=FALSE}
+testCompareR::compareR(
+  df = dat_m3_speech,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m3_speech,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (AND)"))
+
+```
+
+```{r, include=FALSE}
+resa = dplyr::bind_rows(
+  resa1_nospeech, resa2_nospeech, resa4_nospeech, resa5_nospeech, 
+  resa1_speech, resa2_speech, resa4_speech, resa5_speech, 
+) %>%
+  rownames_to_column("Psych") %>%
+  mutate(Psych = gsub("[0-9]","", gsub("\\.", "", Psych)),
+         subG = paste0(Psych, " (", Age, ")"))%>%
+  arrange(Test, Psych, Age)
+
+
+res_LR = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, grepl("LR", subG, fixed=TRUE)),
+  subgroup=Age,
+  studlab = Test
+)
+
+res_sesp = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, !grepl("LR", subG, fixed=TRUE)),
+  subgroup=Test,
+  studlab = Age
+)
+```
+
+### S5.1.1 Sensitivity and specificity of the ADI-R, ADOS-2, for children/early adolescents with vs without speech therapist 
+```{r,include=FALSE}
+pdf("Figures/FigureS18.SA_Speech_therapist.pdf", width = 12, height = 10)
+
+
+meta::forest(
+  smlab = "",
+  res_sesp,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+
+dev.off()
+```
+
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  smlab = "",
+  res_sesp,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+### S5.1.2 Likelihood ratios of the ADI-R, ADOS-2, and their combination, for children/early adolescents with vs without speech therapist 
+```{r,include=FALSE}
+pdf("Figures/FigS19.SA_Speech_therapist_LR.pdf",  width = 12, height = 10)
+
+meta::forest(
+  res_LR,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+dev.off()
+```
+
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  res_LR,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+A first sensitivity analysis showed that tool accuracy did not significantly differ whether or not a speech therapist was part of the diagnostic team.
+
+
+\newpage
+## S5.2 Time interval between test 
+#### S5.2.1 Children/early adolescents  
+```{r, include=FALSE}
+quartiles <- quantile(dat_m3$time_btw_tests, probs = c(0.25, 0.75), na.rm = TRUE)
+Q1 <- quartiles[1]
+Q3 <- quartiles[2]
+
+data_filtree <- dat_m3$time_btw_tests[dat_m3$time_btw_tests >= Q1 & dat_m3$time_btw_tests <= Q3]
+
+Moyenne_IQR_Tronquee <- mean(data_filtree, na.rm = TRUE)
+
+dat_m3_more<-dat_m3%>%
+  filter(time_btw_tests>7, na.rm=TRUE)
+```
+
+Quartiles between tests Q1=`r Q1`, Q3=`r Q3` (in days).  
+Time between tests >7 days, n=`r nrow(dat_m3_more)`
+
+#### S5.2.2 Late adolescents  
+```{r, include=FALSE}
+quartiles <- quantile(dat_m4$time_btw_tests, probs = c(0.25, 0.75), na.rm = TRUE)
+Q1 <- quartiles[1]
+Q3 <- quartiles[2]
+
+data_filtree <- dat_m4$time_btw_tests[dat_m4$time_btw_tests >= Q1 & dat_m4$time_btw_tests <= Q3]
+
+Moyenne_IQR_Tronquee <- mean(data_filtree, na.rm = TRUE)
+
+dat_m4_less<-dat_m4%>%
+  filter(time_btw_tests<30)
+
+dat_m4_more<-dat_m4%>%
+  filter(time_btw_tests>30)
+```
+
+Quartiles between tests Q1=`r Q1`, Q3=`r Q3` (in days).  
+Time between tests >30 days, n=`r nrow(dat_m4_more)`
+
+```{r, include=FALSE}
+resb1_less = test_metrics(dat_m4_less %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Late adolescents (<30 days btw tests)")
+print(resb1_less)
+
+resb2_less = test_metrics(dat_m4_less %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Late adolescents (<30 days btw tests)")
+print(resb2_less)
+
+
+
+
+resb1_more = test_metrics(dat_m4_more %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Late adolescents (>30 days btw tests)")
+print(resb1_more)
+
+resb2_more = test_metrics(dat_m4_more %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Late adolescents (>30 days btw tests)")
+print(resb2_more)
+```
+
+```{r, include=FALSE}
+resb4_less = test_metrics(dat_m4_less %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Late adolescents (<30 days btw tests)")
+print(resb4_less)
+
+resb5_less = test_metrics(dat_m4_less %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Late adolescents (<30 days btw tests)")
+print(resb5_less)
+
+
+resb4_more = test_metrics(dat_m4_more %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Late adolescents (>30 days btw tests)")
+print(resb4_more)
+
+resb5_more = test_metrics(dat_m4_more %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Late adolescents (>30 days btw tests)")
+print(resb5_more)
+```
+
+
+```{r, include=FALSE}
+testCompareR::compareR(
+  df = dat_m4_less,
+  test1 = "ADI_DIAG",
+  test2 = "ADOS_DIAG",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "ADOS-2"))
+```
+
+```{r, include=FALSE}
+testCompareR::compareR(
+  df = dat_m4_less,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m4_less,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "COMB (AND)"))
+```
+
+```{r, include=FALSE}
+testCompareR::compareR(
+  df = dat_m4_less,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (OR)"))
+
+testCompareR::compareR(
+  df = dat_m4_less,
+  test1 = "ADOS_DIAG",
+  test2 = "ADI_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADOS-2", "COMB (AND)"))
+```
+
+
+```{r, include=TRUE}
+resa = dplyr::bind_rows(
+  resb1_less, resb2_less, resb4_less, resb5_less,
+  resb1_more, resb2_more, resb4_more, resb5_more
+) %>%
+  rownames_to_column("Psych") %>%
+  mutate(Psych = gsub("[0-9]","", gsub("\\.", "", Psych)),
+         subG = paste0(Psych, " (", Age, ")"))%>%
+  arrange(Test, Psych, Age)
+
+res_LR = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, grepl("LR", subG, fixed=TRUE)),
+  subgroup=Age,
+  studlab = Test
+)
+
+res_sesp = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, !grepl("LR", subG, fixed=TRUE)),
+  subgroup=Test,
+  studlab = Age
+)
+```
+
+### S5.2.2.1 Sensitivity and specificity of the ADI-R, ADOS-2, and their combination for late adolescents (< or >30 days between tests)
+```{r,echo=FALSE, fig.width=12, fig.height=7}
+meta::forest(
+  smlab = "",
+  res_sesp,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+
+### S5.2.2.2 Likelihood ratios of the ADI-R, ADOS-2,  and their combination for late adolescents (< or >30 days between tests) 
+```{r,echo=FALSE, fig.width=12, fig.height=7}
+meta::forest(
+  res_LR,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+Only n=`r nrow(dat_m3_more)` children/early adolescents had intervals exceeding one week. In the late adolescents group 75% completed both assessments in a week and n=`r nrow(dat_m4_more)` had more than 30 days between tests. A second sensitivity analysis showed that including only participants whose assessments were separated by less than 30 days yielded similar results as those reported in main analysis.
+
+
+\newpage
+## S5.3 ADI-R broader spectrum criteria (Risi et al.)
+```{r, include=FALSE}
+dat_m3_adi <- dat_m3 %>%
+  mutate(ADI_DIAG2 = case_when(is.na(ADI_TOTA_fin) | is.na(ADI_TOTB_fin) ~ NA_real_,
+                                ADI_TOTA_fin >= 10 & ADI_TOTB_fin >= 8 ~ 1,
+                                ADI_TOTA_fin >= 10 & ADI_TOTB_fin >= 6 ~ 1,
+                                ADI_TOTA_fin >= 8  & ADI_TOTB_fin >= 8 ~ 1,
+                                ADI_TOTA_fin >= 9  & ADI_TOTB_fin >= 7 ~ 1,
+                                TRUE ~ 0),
+         ADI2_ADOS_OR  = ifelse(ADI_DIAG2 == 1 | ADOS_DIAG == 1, 1, 0),
+         ADI2_ADOS_AND = ifelse(ADI_DIAG2 == 1 & ADOS_DIAG == 1, 1, 0)) %>%
+  filter(!is.na(ADI_DIAG2))
+
+dat_m4_adi <- dat_m4 %>%
+  mutate(ADI_DIAG2 = case_when(is.na(ADI_TOTA_fin) | is.na(ADI_TOTB_fin) ~ NA_real_,
+                                ADI_TOTA_fin >= 10 & ADI_TOTB_fin >= 8 ~ 1,
+                                ADI_TOTA_fin >= 10 & ADI_TOTB_fin >= 6 ~ 1,
+                                ADI_TOTA_fin >= 8  & ADI_TOTB_fin >= 8 ~ 1,
+                                ADI_TOTA_fin >= 9  & ADI_TOTB_fin >= 7 ~ 1,
+                                TRUE ~ 0),
+         ADI2_ADOS_OR  = ifelse(ADI_DIAG2 == 1 | ADOS_DIAG == 1, 1, 0),
+         ADI2_ADOS_AND = ifelse(ADI_DIAG2 == 1 & ADOS_DIAG == 1, 1, 0)) %>%
+  filter(!is.na(ADI_DIAG2))
+```
+
+Of the full sample, `r nrow(dat_m3) - nrow(dat_m3_adi)` children/early adolescents and `r nrow(dat_m4) - nrow(dat_m4_adi)` late adolescents had missing ADI-R domain A or B totals and were excluded from this sensitivity analysis (restricted sample: n=`r nrow(dat_m3_adi) + nrow(dat_m4_adi)`).
+
+### S5.3.1 Sensitivity and specificity of the ADI-R (Risi et al. broader spectrum criteria), ADOS-2, and their combination, for each age group
+```{r, include=FALSE}
+resa1_adi = test_metrics(dat_m3_adi %>% select(ADI_DIAG2, ASD_DIAG),
+                      "ADI-R2",
+                      "Children/Early adolescents")
+print(resa1_adi)
+
+resa2_adi = test_metrics(dat_m3_adi %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Children/Early adolescents")
+print(resa2_adi)
+
+resb1_adi = test_metrics(dat_m4_adi %>% select(ADI_DIAG2, ASD_DIAG),
+                      "ADI-R2",
+                      "Late adolescents")
+print(resb1_adi)
+
+resb2_adi = test_metrics(dat_m4_adi %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Late adolescents")
+print(resb2_adi)
+```
+
+```{r, include=FALSE}
+resa4_adi = test_metrics(dat_m3_adi %>% select(ADI2_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R2 (sensitivity-maximizing)",
+                     "Children/Early adolescents")
+print(resa4_adi)
+
+resa5_adi = test_metrics(dat_m3_adi %>% select(ADI2_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R2 (specificity-maximizing)",
+                     "Children/Early adolescents")
+print(resa5_adi)
+
+resb4_adi = test_metrics(dat_m4_adi %>% select(ADI2_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R2 (sensitivity-maximizing)",
+                     "Late adolescents")
+print(resb4_adi)
+
+resb5_adi = test_metrics(dat_m4_adi %>% select(ADI2_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R2 (specificity-maximizing)",
+                     "Late adolescents")
+print(resb5_adi)
+```
+
+```{r, include=FALSE}
+resa_risi = dplyr::bind_rows(
+  resa1_adi, resa2_adi, resa4_adi, resa5_adi,
+  resb1_adi, resb2_adi, resb4_adi, resb5_adi
+) %>%
+  rownames_to_column("Psych") %>%
+  mutate(Psych = gsub("[0-9]","", gsub("\\.", "", Psych)),
+         subG = paste0(Psych, " (", Age, ")")) %>%
+  arrange(Test, Psych, Age)
+
+res_LR_risi = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa_risi, grepl("LR", subG, fixed=TRUE)),
+  subgroup=Age,
+  studlab = Test
+)
+
+res_sesp_risi = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa_risi, !grepl("LR", subG, fixed=TRUE)),
+  subgroup=Test,
+  studlab = Age
+)
+```
+
+```{r, include=FALSE}
+pdf("Figures/FigS20_ADIR_Risi.pdf", width = 12, height = 10)
+meta::forest(
+  smlab = "",
+  res_sesp_risi,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+dev.off()
+```
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  smlab = "",
+  res_sesp_risi,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+```{r, include=FALSE}
+pdf("Figures/FigS21_ADIR_Risi_LR.pdf", width = 12, height = 10)
+meta::forest(
+  res_LR_risi,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+dev.off()
+```
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  res_LR_risi,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+### S5.3.2 Sensitivity and specificity of the standard ADI-R, ADOS-2, and their combination, for each age group (same restricted sample, n=`r nrow(dat_m3_adi) + nrow(dat_m4_adi)`)
+```{r, include=FALSE}
+resa1_adi1 = test_metrics(dat_m3_adi %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Children/Early adolescents")
+print(resa1_adi1)
+
+resa2_adi1 = test_metrics(dat_m3_adi %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Children/Early adolescents")
+print(resa2_adi1)
+
+resb1_adi1 = test_metrics(dat_m4_adi %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Late adolescents")
+print(resb1_adi1)
+
+resb2_adi1 = test_metrics(dat_m4_adi %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Late adolescents")
+print(resb2_adi1)
+```
+
+```{r, include=FALSE}
+resa4_adi1 = test_metrics(dat_m3_adi %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Children/Early adolescents")
+print(resa4_adi1)
+
+resa5_adi1 = test_metrics(dat_m3_adi %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Children/Early adolescents")
+print(resa5_adi1)
+
+resb4_adi1 = test_metrics(dat_m4_adi %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Late adolescents")
+print(resb4_adi1)
+
+resb5_adi1 = test_metrics(dat_m4_adi %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Late adolescents")
+print(resb5_adi1)
+```
+
+```{r, include=FALSE}
+resa_adi_orig = dplyr::bind_rows(
+  resa1_adi1, resa2_adi1, resa4_adi1, resa5_adi1,
+  resb1_adi1, resb2_adi1, resb4_adi1, resb5_adi1
+) %>%
+  rownames_to_column("Psych") %>%
+  mutate(Psych = gsub("[0-9]","", gsub("\\.", "", Psych)),
+         subG = paste0(Psych, " (", Age, ")")) %>%
+  arrange(Test, Psych, Age)
+
+res_LR_adi_orig = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa_adi_orig, grepl("LR", subG, fixed=TRUE)),
+  subgroup=Age,
+  studlab = Test
+)
+
+res_sesp_adi_orig = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa_adi_orig, !grepl("LR", subG, fixed=TRUE)),
+  subgroup=Test,
+  studlab = Age
+)
+```
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  smlab = "",
+  res_sesp_adi_orig,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  res_LR_adi_orig,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+### S5.3.3 Comparison
+
+#### S5.3.3.1 Children/early adolescents
 ```{r}
-library(dplyr)
-library(purrr)
-library(rlang) # Often good practice when using .data
+testCompareR::compareR(
+  df = dat_m3_adi,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_DIAG2",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "ADI-R2"))
 
-summarize_predictors <- function(data_name, outcome, age_group, test) {
-  
-  # Get the actual data from its name
-  data <- get(data_name)
-  predictor_names = c("age_years_std", "IQ_std", "SEX", "PSYCH_COMOR")
+testCompareR::compareR(
+  df = dat_m3_adi,
+  test1 = "ADI_ADOS_OR",
+  test2 = "ADI2_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("COMB (OR)", "COMB (OR) ADI-R2"))
 
-  # Define the predictors from your model
-  
-  # Use map_dfr to iterate over each predictor and build one summary table
-  summary_table <- purrr::map_dfr(predictor_names, function(pred_name) {
-    
-    predictor_column <- data[[pred_name]]
-    
-    if (is.numeric(predictor_column) && n_distinct(predictor_column, na.rm = TRUE) > 2) {
-      # --- Continuous variable logic ---
-      
-      median_val <- median(data[[pred_name]], na.rm = TRUE)
-      
-      summary_df <- data %>%
-        mutate(
-          Group = if_else(
-            .data[[pred_name]] >= median_val,
-            "Above/Equal to Median",
-            "Below Median"
-          )
-        ) %>%
-        group_by(Group) %>%
-        summarise(
-          N = n(),
-          DIAG_CORRECT = mean(.data[[outcome]], na.rm = TRUE) * 100,
-          .groups = 'drop'
-        ) %>%
-        mutate(Predictor = pred_name, .before = 1) %>%
-        filter(!is.na(Group))
-      
-    } else {
-      # --- Binary/Categorical variable logic ---
-      
-      summary_df <- data %>%
-        group_by(Group = as.character(.data[[pred_name]])) %>%
-        summarise(
-          N = n(),
-          DIAG_CORRECT = mean(.data[[outcome]], na.rm = TRUE) * 100,
-          .groups = 'drop'
-        ) %>%
-        mutate(Predictor = pred_name, .before = 1)%>%
-        filter(!is.na(Group))
-    }
-    
-    return(summary_df)
-  })
-  
-  summary_table %>%
-    mutate(
-      Age = age_group,
-      Test = test,
-      Outcome = outcome,
-      .before = 1
-    )
-}
-
-
-library(kableExtra)
-
-tribble(
-  ~data, ~outcome, ~age_group, ~test,
-  "dat_m3", "ADI_CORRECT", "Children", "ADI-R") %>%
-  pmap_dfr(summarize_predictors) %>%
-  kbl() %>%
-    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
-    scroll_box(width = "100%", height = "500px")
-
-tribble(
-  ~data, ~outcome, ~age_group, ~test,
-  "dat_m3", "ADOS_CORRECT", "Children", "ADOS-2") %>%
-  pmap_dfr(summarize_predictors) %>%
-  kbl() %>%
-    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
-    scroll_box(width = "100%", height = "500px")
-
-tribble(
-  ~data, ~outcome, ~age_group, ~test,
-  "dat_m4", "ADI_CORRECT", "Adults", "ADI-R") %>%
-  pmap_dfr(summarize_predictors) %>%
-  kbl() %>%
-    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
-    scroll_box(width = "100%", height = "500px")
-
-tribble(
-  ~data, ~outcome, ~age_group, ~test,
-  "dat_m4", "ADOS_CORRECT", "Adults", "ADOS-2") %>%
-  pmap_dfr(summarize_predictors) %>%
-  kbl() %>%
-    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), position = "left") %>%
-    scroll_box(width = "100%", height = "500px")
-
+testCompareR::compareR(
+  df = dat_m3_adi,
+  test1 = "ADI_ADOS_AND",
+  test2 = "ADI2_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("COMB (AND)", "COMB (AND) ADI-R2"))
 ```
 
+#### S5.3.3.2 Late adolescents
+```{r}
+testCompareR::compareR(
+  df = dat_m4_adi,
+  test1 = "ADI_DIAG",
+  test2 = "ADI_DIAG2",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("ADI-R", "ADI-R2"))
+
+testCompareR::compareR(
+  df = dat_m4_adi,
+  test1 = "ADI_ADOS_OR",
+  test2 = "ADI2_ADOS_OR",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("COMB (OR)", "COMB (OR) ADI-R2"))
+
+testCompareR::compareR(
+  df = dat_m4_adi,
+  test1 = "ADI_ADOS_AND",
+  test2 = "ADI2_ADOS_AND",
+  gold = "ASD_DIAG",
+  ppvnpv = FALSE,
+  interpret = FALSE,
+  test.names = c("COMB (AND)", "COMB (AND) ADI-R2"))
+```
+
+Applying the Risi et al. broader spectrum criteria substantially and significantly increased ADI-R sensitivity in both age groups, from 51.20% to 71.08% (P < .001) in children/early adolescents and from 43.71% to 68.29% (P < .001) in late adolescents. This gain came at the cost of reduced specificity among children/early adolescents (82.28% to 63.29%; P < .001), whereas the corresponding decrease in late adolescents was not statistically significant (86.67% to 73.33%; P = .221). These results confirm that algorithm choice involves a fundamental trade-off between sensitivity and specificity.
+
+
+\newpage
+## S5.4 Age restriction : children/early adolescents <16yo and late adolescents >=16yo
+```{r, include=FALSE}
+dat_m3_age <- dat_m3%>%
+  filter(age_years<16)
+
+dat_m4_age <- dat_m4%>%
+  filter(age_years>=16)
+```
+
+```{r, include=FALSE}
+resa1_age = test_metrics(dat_m3_age %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Children/Early adolescents <16 yo")
+print(resa1_age)
+
+resa2_age = test_metrics(dat_m3_age %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Children/Early adolescents <16 yo")
+print(resa2_age)
+
+resa4_age = test_metrics(dat_m3_age %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Children/Early adolescents <16 yo")
+print(resa4_age)
+
+resa5_age = test_metrics(dat_m3_age %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Children/Early adolescents <16 yo")
+print(resa5_age)
+```
+
+
+
+```{r, include=FALSE}
+resb1_age = test_metrics(dat_m4_age %>% select(ADI_DIAG, ASD_DIAG),
+                      "ADI-R",
+                      "Late adolescents >=16yo")
+print(resb1_age)
+
+
+resb2_age = test_metrics(dat_m4_age %>% select(ADOS_DIAG, ASD_DIAG),
+                     "ADOS-2",
+                     "Late adolescents >=16yo")
+print(resb2_age)
+
+resb4_age = test_metrics(dat_m4_age %>% select(ADI_ADOS_OR, ASD_DIAG),
+                     "ADOS-2 OR ADI-R (sensitivity-maximizing)",
+                     "Late adolescents >=16yo")
+print(resb4_age)
+
+resb5_age = test_metrics(dat_m4_age %>% select(ADI_ADOS_AND, ASD_DIAG),
+                     "ADOS-2 AND ADI-R (specificity-maximizing)",
+                     "Late adolescents >=16yo")
+print(resb5_age)
+```
+
+
+
+
+```{r, include=FALSE}
+resa = dplyr::bind_rows(
+  resa1_age, resa2_age, resa4_age, resa5_age,
+  resb1_age, resb2_age, resb4_age, resb5_age
+) %>%
+  rownames_to_column("Psych") %>%
+  mutate(Psych = gsub("[0-9]","", gsub("\\.", "", Psych)),
+         subG = paste0(Psych, " (", Age, ")"))%>%
+  arrange(Test, Psych, Age)
+
+
+res_LR = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, grepl("LR", subG, fixed=TRUE)),
+  subgroup=Age,
+  studlab = Test
+)
+
+res_sesp = meta::metagen(
+  TE=Estimate, lower=Lower.CI, upper=Upper.CI,
+  data=subset(resa, !grepl("LR", subG, fixed=TRUE)),
+  subgroup=Test,
+  studlab = Age
+)
+```
+
+### S5.4.1 Sensitivity and specificity of the ADI-R, ADOS-2, and their combination, for each age group with age restrictions. 
+```{r, include=FALSE}
+cairo_pdf(file.path("Figures", "FigS22_SA_Age.pdf"),
+          width = 7.0,        
+          height = 5.5,
+          family = "Times",    
+          pointsize = 9)
+
+meta::forest(
+  smlab = "",
+  res_sesp,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+
+dev.off()
+```
+
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  smlab = "",
+  res_sesp,
+  digits = 2,
+  weight.study = "same",
+  xlim = c(25, 100),
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  colgap.left = "10mm",
+  colgap.forest.left = "10mm",
+  colgap.forest.right = "10mm",
+  squaresize = 0.7,
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("", ""),
+  rightcols = c("effect.ci"),
+  rightlabs = c("Value (%) and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+### S5.4.2 Likelihood ratios of the ADI-R, ADOS-2, and their combination, for each age group.
+```{r, include=FALSE}
+pdf("Figures/FigS23_SA_Age_LR.pdf",  width = 12, height = 10)
+
+meta::forest(
+  res_LR,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+dev.off()
+```
+
+```{r,echo=FALSE, fig.width=12, fig.height=8}
+meta::forest(
+  res_LR,
+  digits = 2,
+  xlim = c(0, 7),
+  weight.study = "same",
+  common = FALSE,
+  random = FALSE,
+  overall = FALSE,
+  hetstat = FALSE,
+  subgroup = TRUE,
+  squaresize = 0.5,
+  xlab = "",
+  leftcols = c("studlab", "Psych"),
+  leftlabs = c("Test", "Psychometric"),
+  rightlabs = c("Value and 95% CI"),
+  subgroup.name = ""
+)
+```
+
+### S5.4.3 Children/early adolescents vs late adolescents ADOS-2 sensitivity
+```{r, include=FALSE}
+m3_asd_age <- dat_m3_age %>%
+  filter(ASD_DIAG == 1 & !is.na(ADOS_DIAG))
+m4_asd_age <- dat_m4_age %>%
+  filter(ASD_DIAG == 1 & !is.na(ADOS_DIAG))
+
+x <- c(sum(m3_asd_age$ADOS_DIAG == 1), sum(m4_asd_age$ADOS_DIAG == 1))
+n <- c(nrow(m3_asd_age),               nrow(m4_asd_age))
+
+ci_group <- function(xi, ni) {
+  ci <- prop.test(xi, ni, correct = FALSE)$conf.int
+  c(sens = xi / ni, lower = ci[1], upper = ci[2])
+}
+sens_m3 <- ci_group(x[1], n[1])
+sens_m4 <- ci_group(x[2], n[2])
+
+test_diff <- prop.test(x, n, correct = FALSE)
+
+cat(sprintf(
+"ADOS-2 SENSITIVITY (true positives / ASD cases)
+  Children/early adolescents : %d/%d = %.1f%% [95%% CI %.1f-%.1f]
+  Late adolescents           : %d/%d = %.1f%% [95%% CI %.1f-%.1f]
+
+Difference (m3 - m4) = %+.1f points [95%% CI %.1f to %.1f]
+Chi-squared(%d) = %.3f, p = %s
+",
+  x[1], n[1], 100*sens_m3["sens"], 100*sens_m3["lower"], 100*sens_m3["upper"],
+  x[2], n[2], 100*sens_m4["sens"], 100*sens_m4["lower"], 100*sens_m4["upper"],
+  100*(sens_m3["sens"] - sens_m4["sens"]),
+  100*test_diff$conf.int[1], 100*test_diff$conf.int[2],
+  test_diff$parameter, test_diff$statistic,
+  format.pval(test_diff$p.value, digits = 3, eps = 0.001)
+))
+
+glue::glue(
+  "ADOS-2 sensitivity was {round(100*sens_m3['sens'],1)}% ",
+  "(95% CI {round(100*sens_m3['lower'],1)}-{round(100*sens_m3['upper'],1)}) ",
+  "in children/early adolescents and {round(100*sens_m4['sens'],1)}% ",
+  "(95% CI {round(100*sens_m4['lower'],1)}-{round(100*sens_m4['upper'],1)}) ",
+  "in late adolescents (difference = {round(100*(sens_m3['sens']-sens_m4['sens']),1)} ",
+  "percentage points, 95% CI {round(100*test_diff$conf.int[1],1)} to ",
+  "{round(100*test_diff$conf.int[2],1)}; chi2 = {round(test_diff$statistic,2)}, ",
+  "p = {format.pval(test_diff$p.value, digits=3, eps=0.001)})."
+)
+```
+
+ADOS-2 sensitivity was `r round(100*sens_m3['sens'],1)`% 
+(95% CI `r round(100*sens_m3['lower'],1)`-`r round(100*sens_m3['upper'],1)`) 
+in children/early adolescents and `r round(100*sens_m4['sens'],1)`% 
+(95% CI `r round(100*sens_m4['lower'],1)`-`r round(100*sens_m4['upper'],1)`) 
+in late adolescents (difference = `r round(100*(sens_m3['sens']-sens_m4['sens']),1)` 
+percentage points, 95% CI `r round(100*test_diff$conf.int[1],1)` to 
+`r round(100*test_diff$conf.int[2],1)`; chi2 = `r round(test_diff$statistic,2)`, 
+p = `r format.pval(test_diff$p.value, digits=3, eps=0.001)`).
+
+
+Finally, given the age overlap between ADOS-2 modules 3 and 4, we conducted a fourth sensitivity analysis restricted to children and early adolescents younger than 16 years and to late adolescents aged 16 years or older. Diagnostic accuracy estimates were comparable to those obtained in the main analysis.
